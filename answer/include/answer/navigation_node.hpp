@@ -46,49 +46,58 @@ namespace navigation {
         Path a_star(info_interfaces::msg::Map map, int src_x, int src_y, int dst_x, int dst_y) {
             std::priority_queue<Node> to_visit;
             std::unordered_map<int, Node*> visited;
+            std::unordered_set<Node*> node_allocated;
 
-            Node* start = new Node(src_x, src_y, 0, manhattan_distance(src_x, src_y, dst_x, dst_y));
-            to_visit.push(*start);
+            Node start(src_x, src_y, 0, manhattan_distance(src_x, src_y, dst_x, dst_y));
+            to_visit.push(start);
 
             while (!to_visit.empty()) {
-                Node current = to_visit.top();
+                Node* current = new Node(to_visit.top().x, to_visit.top().y, to_visit.top().real_cost, to_visit.top().heuristic_cost, to_visit.top().parent);
+                node_allocated.insert(current);
+                visited[current->x * map.col + current->y] = current;
                 to_visit.pop();
 
-                if (current.x == dst_x && current.y == dst_y) {
+                if (current->x == dst_x && current->y == dst_y) {
                     Path path;
-                    Node* node = &current;
+                    Node* node = current;
                     while (nullptr != node) {
                         path.push_back({ node->x, node->y });
                         node = node->parent;
                     }
                     std::reverse(path.begin(), path.end());
+                    for (Node* node : node_allocated) {
+                        delete node;
+                    }
                     return path;
                 }
-
-                visited[current.x * map.col + current.y] = &current;
 
                 for (int dx = -1; dx <= 1;dx++) {
                     for (int dy = -1; dy <= 1; dy++) {
                         // 跳过当前节点
                         if (dx == 0 && dy == 0) continue;
 
-                        int new_x = current.x + dx;
-                        int new_y = current.y + dy;
+                        int new_x = current->x + dx;
+                        int new_y = current->y + dy;
 
-                        if (new_x > 0 && new_x < map.row && new_y >0 && new_y < map.col) {
-                            int new_real_cost = current.real_cost + 1;
+                        if (new_x > 0 && new_x < map.row && new_y >0 && new_y < map.col && 0 == map.mat[new_x * map.col + new_y]) {
+                            int new_real_cost = current->real_cost + 1;
                             int new_heuristic_cost = manhattan_distance(new_x, new_y, dst_x, dst_y);
-                            Node* neighbor = new Node(new_x, new_y, new_real_cost, new_heuristic_cost, &current);
+                            Node* neighbor = new Node(new_x, new_y, new_real_cost, new_heuristic_cost, current);
 
                             // 如果邻居节点已经探索过，并且新的实际代价更大，则跳过
                             if (visited.find(new_x * map.col + new_y) != visited.end() && visited[new_x * map.col + new_y]->real_cost <= new_real_cost) {
+                                delete neighbor;
                                 continue;
                             }
-
+                            node_allocated.insert(neighbor);
                             to_visit.push(*neighbor);
                         }
                     }
                 }
+            }
+
+            for (Node* node : node_allocated) {
+                delete node;
             }
 
             // 没有找到路径则返回空
