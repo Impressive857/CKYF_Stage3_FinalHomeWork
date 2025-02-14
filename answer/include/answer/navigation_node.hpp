@@ -4,8 +4,9 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include <queue>
+#include <cmath>
 
-#include <geometry_msgs/msg/pose.hpp>
+#include <geometry_msgs/msg/pose2_d.hpp>
 #include <example_interfaces/msg/bool.hpp>
 #include <example_interfaces/msg/int64.hpp>
 
@@ -43,7 +44,7 @@ namespace navigation {
             return std::abs(x1 - x2) + std::abs(y1 - y2);
         }
         using Path = std::vector<std::pair<int, int>>;
-        Path a_star(info_interfaces::msg::Map map, int src_x, int src_y, int dst_x, int dst_y) {
+        Path a_star(const info_interfaces::msg::Map::SharedPtr map, int src_x, int src_y, int dst_x, int dst_y, rclcpp::Logger logger) {
             std::priority_queue<Node> to_visit;
             std::unordered_map<int, Node*> visited;
             std::unordered_set<Node*> node_allocated;
@@ -54,7 +55,7 @@ namespace navigation {
             while (!to_visit.empty()) {
                 Node* current = new Node(to_visit.top().x, to_visit.top().y, to_visit.top().real_cost, to_visit.top().heuristic_cost, to_visit.top().parent);
                 node_allocated.insert(current);
-                visited[current->x * map.col + current->y] = current;
+                visited[current->y * map->col + current->x] = current;
                 to_visit.pop();
 
                 if (current->x == dst_x && current->y == dst_y) {
@@ -71,26 +72,29 @@ namespace navigation {
                     return path;
                 }
 
-                for (int dx = -1; dx <= 1;dx++) {
+                for (int dx = -1; dx <= 1; dx++) {
                     for (int dy = -1; dy <= 1; dy++) {
                         // 跳过当前节点
                         if (dx == 0 && dy == 0) continue;
 
                         int new_x = current->x + dx;
                         int new_y = current->y + dy;
+                        // RCLCPP_INFO(logger, "new_x:%d new_y:%d", new_x, new_y);
+                        // RCLCPP_INFO(logger, "size:%d", map->mat.size());
+                        // RCLCPP_INFO(logger, "mul:%d", map->col * map->row);
+                        // RCLCPP_INFO(logger, "row:%d col:%d", map->row, map->col);
+                        // RCLCPP_INFO(logger, "index:%d", new_y * map->col + new_x);
+                        // RCLCPP_INFO(logger, "empty:%d", map->mat.empty());
+                        // RCLCPP_INFO(logger, "val:%d", map->mat.at(new_y * map->col + new_x));
 
-                        if (new_x > 0 && new_x < map.row && new_y >0 && new_y < map.col && 0 == map.mat[new_x * map.col + new_y]) {
+                        if (new_x >= 0 && new_x < static_cast<int>(map->col) && new_y >= 0 && new_y < static_cast<int>(map->row) && 0 == map->mat[new_y * map->col + new_x]) {
                             int new_real_cost = current->real_cost + 1;
                             int new_heuristic_cost = manhattan_distance(new_x, new_y, dst_x, dst_y);
-                            Node* neighbor = new Node(new_x, new_y, new_real_cost, new_heuristic_cost, current);
-
-                            // 如果邻居节点已经探索过，并且新的实际代价更大，则跳过
-                            if (visited.find(new_x * map.col + new_y) != visited.end() && visited[new_x * map.col + new_y]->real_cost <= new_real_cost) {
-                                delete neighbor;
-                                continue;
+                            // 如果邻居节点没探索过，或者新的代价更小，则添加
+                            if (visited.find(new_y * map->col + new_x) == visited.end() || visited[new_y * map->col + new_x]->total_cost() > new_real_cost + new_heuristic_cost) {
+                                Node neighbor(new_x, new_y, new_real_cost, new_heuristic_cost, current);
+                                to_visit.push(neighbor);
                             }
-                            node_allocated.insert(neighbor);
-                            to_visit.push(*neighbor);
                         }
                     }
                 }
@@ -116,7 +120,7 @@ namespace navigation {
         void password_cbfn(const example_interfaces::msg::Int64::SharedPtr password);
         void password_segment_cbfn(const example_interfaces::msg::Int64::SharedPtr password_segment);
     private:
-        rclcpp::Publisher<geometry_msgs::msg::Pose>::SharedPtr m_our_pose_publisher;
+        rclcpp::Publisher<geometry_msgs::msg::Pose2D>::SharedPtr m_our_pose_publisher;
         rclcpp::Publisher<example_interfaces::msg::Bool>::SharedPtr m_shoot_publisher;
         rclcpp::Subscription<example_interfaces::msg::Int64>::SharedPtr m_password_subscription;
         rclcpp::Subscription<example_interfaces::msg::Int64>::SharedPtr m_password_segment_subscription;
@@ -124,7 +128,7 @@ namespace navigation {
         rclcpp::Subscription<info_interfaces::msg::Area>::SharedPtr m_area_subscription;
         rclcpp::Subscription<info_interfaces::msg::Robot>::SharedPtr m_robot_subscription;
         info_interfaces::msg::Area m_area;
-        info_interfaces::msg::Map m_map;
+        info_interfaces::msg::Map::SharedPtr m_map;
         example_interfaces::msg::Int64 m_password;
         std::vector<example_interfaces::msg::Int64> m_password_segment_vec;
     };

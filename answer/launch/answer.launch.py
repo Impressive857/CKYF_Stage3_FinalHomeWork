@@ -16,7 +16,7 @@ def generate_launch_description():
     return launch.LaunchDescription(
         [
             # action动作
-            action_node_img2map_node,
-            action_node_navigation_node
+            action_node_navigation_node,
+            action_node_img2map_node
         ]
     )

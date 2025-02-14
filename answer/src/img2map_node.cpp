@@ -4,7 +4,7 @@ img2map::Node::Node(const std::string& name)
     :rclcpp::Node(name)
 {
     m_initialized = false;
-    m_map_publisher = this->create_publisher<info_interfaces::msg::Map>(topic_name::map, 5);
+    m_map_publisher = this->create_publisher<info_interfaces::msg::Map>(topic_name::map, 1);
     m_area_publisher = this->create_publisher<info_interfaces::msg::Area>(topic_name::area, 1);
     m_robot_publisher = this->create_publisher<info_interfaces::msg::Robot>(topic_name::robot, 1);
     m_img_subscription = this->create_subscription<sensor_msgs::msg::Image>("image_raw", 10, std::bind(&img2map::Node::img2map_cbfn, this, std::placeholders::_1));
@@ -127,9 +127,9 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         map.row = binary.rows;
         map.col = binary.cols;
         map.mat.resize(binary.rows * binary.cols);
-        for (int i = 0; i < binary.rows; i++) {
-            for (int j = 0; j < binary.cols; j++) {
-                map.mat[j + i * binary.cols] = binary.at<uchar>(i, j);
+        for (int j = 0; j < binary.rows; j++) {
+            for (int i = 0; i < binary.cols; i++) {
+                map.mat[i + j * binary.cols] = binary.at<uchar>(j, i);
             }
         }
 
@@ -152,6 +152,8 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
             m_initialized = false;
             return;
         }
+        robot.our_robot.x = center_pos_vec[0].x;
+        robot.our_robot.y = center_pos_vec[0].y;
 
         // 获取敌方机器人位置
         // rgb(255,104,104)

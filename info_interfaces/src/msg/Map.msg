@@ -1,3 +1,3 @@
 uint32 row
 uint32 col
-bool[] mat
+uint8[] mat

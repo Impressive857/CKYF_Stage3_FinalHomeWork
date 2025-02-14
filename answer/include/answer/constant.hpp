@@ -2,7 +2,7 @@
 #define _CONSTANT_HPP_
 
 namespace topic_name{
-    const char* map = "map";
+    const char* map = "map_topic";
     const char* area = "area";
     const char* robot = "robot";
     const char* pose = "pose";

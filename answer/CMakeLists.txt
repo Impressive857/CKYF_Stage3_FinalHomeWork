@@ -12,7 +12,7 @@ set(EXEC_LIBRARY_DIR ${PROJECT_SOURCE_DIR}/lib)
 file(GLOB_RECURSE EXEC_SRC ${EXEC_SRC_DIR}/*.cpp)
 file(GLOB_RECURSE EXEC_INCLUDE ${EXEC_INCLUDE_DIR}/*.h)
 
-set(EXEC_DEPEND rclcpp OpenCV cv_bridge)
+set(EXEC_DEPEND rclcpp OpenCV cv_bridge sensor_msgs geometry_msgs example_interfaces info_interfaces)
 set(ALL_EXEC img2map_node navigation_node)
 
 # find dependencies
@@ -21,6 +21,8 @@ find_package(rclcpp REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(example_interfaces REQUIRED)
 ament_auto_find_build_dependencies()
 # uncomment the following section in order to fill in
 # further dependencies manually.
