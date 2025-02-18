@@ -17,6 +17,8 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
     std::vector<cv::Rect> border_rect_vec; // 存储区域边界矩形
     cv::Scalar lower; // 颜色下限
     cv::Scalar upper; // 颜色上限
+    const int grid_width = cv_raw_img->image.cols / constant::grid_num_v; // 网格宽度
+    const int grid_height = cv_raw_img->image.rows / constant::grid_num_h; // 网格高度
     if (!m_initialized) {
         RCLCPP_INFO(get_logger(), "map info init");
 
@@ -32,8 +34,8 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
             RCLCPP_INFO(get_logger(), "failed to get password area!");
             return;
         }
-        area.password.x = center_pos_vec[0].x;
-        area.password.y = center_pos_vec[0].y;
+        area.password.x = center_pos_vec[0].x / grid_width;
+        area.password.y = center_pos_vec[0].y / grid_height;
 
         // 获取补给区
         // rgb(60,85,107)
@@ -44,8 +46,8 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
             RCLCPP_INFO(get_logger(), "failed to get recover area!");
             return;
         }
-        area.recover.x = center_pos_vec[0].x;
-        area.recover.y = center_pos_vec[0].y;
+        area.recover.x = center_pos_vec[0].x / grid_width;
+        area.recover.y = center_pos_vec[0].y / grid_height;
 
         // 获取基地
         // rgb(170,120,151)
@@ -56,8 +58,8 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
             RCLCPP_INFO(get_logger(), "failed to get base area!");
             return;
         }
-        area.base.x = center_pos_vec[0].x;
-        area.base.y = center_pos_vec[0].y;
+        area.base.x = center_pos_vec[0].x / grid_width;
+        area.base.y = center_pos_vec[0].y / grid_height;
 
         // 获取紫色出入口
         // rgb(193,97,212)
@@ -69,16 +71,16 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
             return;
         }
         if (border_rect_vec[0].width > border_rect_vec[1].width) {
-            area.purple_in.x = center_pos_vec[0].x;
-            area.purple_in.y = center_pos_vec[0].y;
-            area.purple_out.x = center_pos_vec[1].x;
-            area.purple_out.y = center_pos_vec[1].y;
+            area.purple_in.x = center_pos_vec[0].x / grid_width;
+            area.purple_in.y = center_pos_vec[0].y / grid_height;
+            area.purple_out.x = center_pos_vec[1].x / grid_width;
+            area.purple_out.y = center_pos_vec[1].y / grid_height;
         }
         else {
-            area.purple_in.x = center_pos_vec[1].x;
-            area.purple_in.y = center_pos_vec[1].y;
-            area.purple_out.x = center_pos_vec[0].x;
-            area.purple_out.y = center_pos_vec[0].y;
+            area.purple_in.x = center_pos_vec[1].x / grid_width;
+            area.purple_in.y = center_pos_vec[1].y / grid_height;
+            area.purple_out.x = center_pos_vec[0].x / grid_width;
+            area.purple_out.y = center_pos_vec[0].y / grid_height;
         }
 
         // 获取绿色出入口
@@ -91,16 +93,16 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
             return;
         }
         if (border_rect_vec[0].width > border_rect_vec[1].width) {
-            area.green_in.x = center_pos_vec[0].x;
-            area.green_in.y = center_pos_vec[0].y;
-            area.green_out.x = center_pos_vec[1].x;
-            area.green_out.y = center_pos_vec[1].y;
+            area.green_in.x = center_pos_vec[0].x / grid_width;
+            area.green_in.y = center_pos_vec[0].y / grid_height;
+            area.green_out.x = center_pos_vec[1].x / grid_width;
+            area.green_out.y = center_pos_vec[1].y / grid_height;
         }
         else {
-            area.green_in.x = center_pos_vec[1].x;
-            area.green_in.y = center_pos_vec[1].y;
-            area.green_out.x = center_pos_vec[0].x;
-            area.green_out.y = center_pos_vec[0].y;
+            area.green_in.x = center_pos_vec[1].x / grid_width;
+            area.green_in.y = center_pos_vec[1].y / grid_height;
+            area.green_out.x = center_pos_vec[0].x / grid_width;
+            area.green_out.y = center_pos_vec[0].y / grid_height;
         }
 
         m_area_publisher->publish(area);
@@ -124,12 +126,14 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         // 处理后图像路径是黑色，边缘是白色
         // map.mat存储的是bool，黑色为0，白色为1
         info_interfaces::msg::Map map;
-        map.row = binary.rows;
-        map.col = binary.cols;
-        map.mat.resize(binary.rows * binary.cols);
-        for (int j = 0; j < binary.rows; j++) {
-            for (int i = 0; i < binary.cols; i++) {
-                map.mat[i + j * binary.cols] = binary.at<uchar>(j, i);
+        map.row = constant::grid_num_h;
+        map.col = constant::grid_num_v;
+        map.mat.resize(constant::grid_num_h * constant::grid_num_v);
+        map.grid_width = grid_width;
+        map.grid_height = grid_height;
+        for (int j = 0; j < constant::grid_num_h; j++) {
+            for (int i = 0; i < constant::grid_num_v; i++) {
+                map.mat[i + j * constant::grid_num_v] = binary.at<uchar>((j + 0.5) * grid_height, (i + 0.5) * grid_width);
             }
         }
 
@@ -152,8 +156,8 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
             m_initialized = false;
             return;
         }
-        robot.our_robot.x = center_pos_vec[0].x;
-        robot.our_robot.y = center_pos_vec[0].y;
+        robot.our_robot.x = center_pos_vec[0].x / grid_width;
+        robot.our_robot.y = center_pos_vec[0].y / grid_height;
 
         // 获取敌方机器人位置
         // rgb(255,104,104)
@@ -167,8 +171,9 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         }
         for (size_t i = 0; i < center_pos_vec.size();i++) {
             info_interfaces::msg::Point enemy_pos;
-            enemy_pos.x = center_pos_vec[i].x;
-            enemy_pos.y = center_pos_vec[i].y;
+            if(center_pos_vec[i].x > 1900) continue;
+            enemy_pos.x = center_pos_vec[i].x / grid_width;
+            enemy_pos.y = center_pos_vec[i].y / grid_height;
             robot.enemy.push_back(enemy_pos);
         }
 

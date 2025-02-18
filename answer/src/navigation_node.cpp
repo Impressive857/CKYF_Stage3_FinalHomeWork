@@ -3,6 +3,9 @@
 navigation::Node::Node(const std::string& name)
     :rclcpp::Node(name)
 {
+    m_count = 0;
+    m_last_x = 0;
+    m_last_y = 0;
     m_our_pose_publisher = this->create_publisher<geometry_msgs::msg::Pose2D>(topic_name::pose, 1);
     m_shoot_publisher = this->create_publisher<example_interfaces::msg::Bool>(topic_name::shoot, 1);
     m_password_subscription = this->create_subscription<example_interfaces::msg::Int64>(topic_name::password, 1, std::bind(&navigation::Node::password_cbfn, this, std::placeholders::_1));
@@ -16,8 +19,6 @@ void navigation::Node::map_init_cbfn(const info_interfaces::msg::Map::SharedPtr 
 {
     RCLCPP_INFO(get_logger(), "map got!");
     m_map = map_info;
-    RCLCPP_INFO(get_logger(), "row:%d col:%d", map_info->row, map_info->col);
-    RCLCPP_INFO(get_logger(), "empty:%d", map_info->mat.empty());
 }
 
 void navigation::Node::area_init_cbfn(const info_interfaces::msg::Area::SharedPtr area_info)
@@ -30,22 +31,50 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
 {
     if (!this->m_map.use_count()) return;
 
-    RCLCPP_INFO(get_logger(), "nav");
-    RCLCPP_INFO(get_logger(), "src_x:%d src_y:%d dst_x:%d dst_y:%d", robot_info->our_robot.x, robot_info->our_robot.y, robot_info->enemy[0].x, robot_info->enemy[0].y);
+    geometry_msgs::msg::Pose2D pose;
 
-    RCLCPP_INFO(get_logger(), "vaild:%ld", this->m_map.use_count());
-    RCLCPP_INFO(get_logger(), "row:%d col:%d", this->m_map->row, this->m_map->col);
-    RCLCPP_INFO(get_logger(), "empty:%d", this->m_map->mat.empty());
-
-    algorithm::Path path = algorithm::a_star(this->m_map, robot_info->our_robot.x, robot_info->our_robot.y, robot_info->enemy[0].x, robot_info->enemy[0].y, get_logger());
-    RCLCPP_INFO(get_logger(), "path is empty %d", path.empty());
-    for (auto& point : path) {
-        RCLCPP_INFO(get_logger(), "moving");
-        geometry_msgs::msg::Pose2D pose;
-        std::tie(pose.x, pose.y) = point;
-        pose.theta = std::atan2(robot_info->our_robot.y - robot_info->enemy[0].y, robot_info->our_robot.x - robot_info->enemy[0].x);
+    if (0 == m_last_x && 0 == m_last_y) {
+        m_last_x = robot_info->our_robot.x;
+        m_last_y = robot_info->our_robot.y;
+    }
+    // 防止卡死在一个位置
+    else if (robot_info->our_robot.x == m_last_x && robot_info->our_robot.y == m_last_y) {
+        m_last_x = robot_info->our_robot.x;
+        m_last_y = robot_info->our_robot.y;
+        pose.x = m_dir[m_count][0];
+        pose.y = m_dir[m_count][1];
+        pose.theta = 0;
+        m_count++;
+        m_count %= 4;
         m_our_pose_publisher->publish(pose);
     }
+    else {
+        if (robot_info->enemy.empty()) return;
+        std::sort(robot_info->enemy.begin(), robot_info->enemy.end(), [&robot_info](const info_interfaces::msg::Point& a, const info_interfaces::msg::Point& b)
+            {return algorithm::manhattan_distance(robot_info->our_robot.x, robot_info->our_robot.y, a.x, a.y) < algorithm::manhattan_distance(robot_info->our_robot.x, robot_info->our_robot.y, b.x, b.y);});
+        algorithm::Path path = algorithm::a_star(
+            this->m_map,
+            robot_info->our_robot.x,
+            robot_info->our_robot.y,
+            robot_info->enemy[0].x,
+            robot_info->enemy[0].y
+        );
+        RCLCPP_INFO(get_logger(), "ourx:%d, oury:%d", robot_info->our_robot.x, robot_info->our_robot.y);
+        RCLCPP_INFO(get_logger(), "enemyx:%d, enemyy:%d", robot_info->enemy[0].x, robot_info->enemy[0].y);
+
+        if (path.size() >= 2) {
+            std::tie(pose.x, pose.y) = path[1];
+            RCLCPP_INFO(get_logger(), "pathx:%d, pathy:%d", path[1].first, path[1].second);
+            pose.x -= robot_info->our_robot.x;
+            pose.y -= robot_info->our_robot.y;
+            pose.x /= 16;
+            pose.y /= 16;
+            pose.theta = std::atan2(robot_info->enemy[0].y - robot_info->our_robot.y, robot_info->enemy[0].x - robot_info->our_robot.x);
+            RCLCPP_INFO(get_logger(), "posex:%lf, posey:%lf theta:%lf", pose.x, pose.y, pose.theta);
+            m_our_pose_publisher->publish(pose);
+        }
+    }
+
 }
 
 void navigation::Node::password_cbfn(const example_interfaces::msg::Int64::SharedPtr password)
