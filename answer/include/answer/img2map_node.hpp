@@ -28,6 +28,7 @@ namespace img2map {
         std::pair<std::vector<cv::Point>, std::vector<cv::Rect>> get_area(const std::string& area_name, cv::InputArray image, cv::Scalar lower, cv::Scalar upper, int min_width, int min_height, int max_width, int max_height);
     private:
         bool m_initialized;
+        int m_hp_block_width; // 生命值条宽度
         rclcpp::Publisher<info_interfaces::msg::Map>::SharedPtr m_map_publisher;
         rclcpp::Publisher<info_interfaces::msg::Area>::SharedPtr m_area_publisher;
         rclcpp::Publisher<info_interfaces::msg::Robot>::SharedPtr m_robot_publisher;

@@ -4,8 +4,13 @@ navigation::Node::Node(const std::string& name)
     :rclcpp::Node(name)
 {
     m_count = 0;
-    m_last_x = 0;
-    m_last_y = 0;
+    m_last_real_x = 0;
+    m_last_real_y = 0;
+    m_bullet_num = 10;
+    m_last_hp = 1.0;
+    m_should_stop = false;
+    m_full_recovered = false;
+    m_need_recover = false;
     m_our_pose_publisher = this->create_publisher<geometry_msgs::msg::Pose2D>(topic_name::pose, 1);
     m_shoot_publisher = this->create_publisher<example_interfaces::msg::Bool>(topic_name::shoot, 1);
     m_password_subscription = this->create_subscription<example_interfaces::msg::Int64>(topic_name::password, 1, std::bind(&navigation::Node::password_cbfn, this, std::placeholders::_1));
@@ -31,50 +36,112 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
 {
     if (!this->m_map.use_count()) return;
 
+    // 按网格距离对敌人排序
+    std::sort(robot_info->enemy_grid_pos_vec.begin(), robot_info->enemy_grid_pos_vec.end(), [&robot_info](const info_interfaces::msg::Point& a, const info_interfaces::msg::Point& b)
+        {return algorithm::manhattan_distance(robot_info->our_robot_grid_pos.x, robot_info->our_robot_grid_pos.y, a.x, a.y) < algorithm::manhattan_distance(robot_info->our_robot_grid_pos.x, robot_info->our_robot_grid_pos.y, b.x, b.y);});
+    // 按实际距离对敌人排序
+    std::sort(robot_info->enemy_real_pos_vec.begin(), robot_info->enemy_real_pos_vec.end(), [&robot_info](const info_interfaces::msg::Point& a, const info_interfaces::msg::Point& b)
+        {return algorithm::manhattan_distance(robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, a.x, a.y) < algorithm::manhattan_distance(robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, b.x, b.y);});
+
     geometry_msgs::msg::Pose2D pose;
 
-    if (0 == m_last_x && 0 == m_last_y) {
-        m_last_x = robot_info->our_robot.x;
-        m_last_y = robot_info->our_robot.y;
-    }
     // 防止卡死在一个位置
-    else if (robot_info->our_robot.x == m_last_x && robot_info->our_robot.y == m_last_y) {
-        m_last_x = robot_info->our_robot.x;
-        m_last_y = robot_info->our_robot.y;
+    if (robot_info->our_robot_real_pos.x == m_last_real_x && robot_info->our_robot_real_pos.y == m_last_real_y && !m_should_stop) {
         pose.x = m_dir[m_count][0];
         pose.y = m_dir[m_count][1];
-        pose.theta = 0;
+        if (robot_info->enemy_real_pos_vec.empty()) {
+            pose.theta = 0;
+        }
+        else {
+            int32_t dy = static_cast<int32_t>(robot_info->enemy_real_pos_vec[0].y) - static_cast<int32_t>(robot_info->our_robot_real_pos.y);
+            int32_t dx = static_cast<int32_t>(robot_info->enemy_real_pos_vec[0].x) - static_cast<int32_t>(robot_info->our_robot_real_pos.x);
+            pose.theta = std::atan2(dy, dx);
+        }
         m_count++;
         m_count %= 4;
         m_our_pose_publisher->publish(pose);
     }
-    else {
-        if (robot_info->enemy.empty()) return;
-        std::sort(robot_info->enemy.begin(), robot_info->enemy.end(), [&robot_info](const info_interfaces::msg::Point& a, const info_interfaces::msg::Point& b)
-            {return algorithm::manhattan_distance(robot_info->our_robot.x, robot_info->our_robot.y, a.x, a.y) < algorithm::manhattan_distance(robot_info->our_robot.x, robot_info->our_robot.y, b.x, b.y);});
+    else if (robot_info->our_robot_hp < constant::danger_hp || m_need_recover || m_bullet_num < constant::danger_bullet_num) {
+        m_need_recover = true;
+        if (robot_info->our_robot_hp >= 1.0) {
+            m_need_recover = false;
+            return;
+        }
         algorithm::Path path = algorithm::a_star(
             this->m_map,
-            robot_info->our_robot.x,
-            robot_info->our_robot.y,
-            robot_info->enemy[0].x,
-            robot_info->enemy[0].y
+            robot_info->our_robot_grid_pos.x,
+            robot_info->our_robot_grid_pos.y,
+            m_area.recover_grid_pos.x,
+            m_area.recover_grid_pos.y
         );
-        RCLCPP_INFO(get_logger(), "ourx:%d, oury:%d", robot_info->our_robot.x, robot_info->our_robot.y);
-        RCLCPP_INFO(get_logger(), "enemyx:%d, enemyy:%d", robot_info->enemy[0].x, robot_info->enemy[0].y);
+
+        if (path.size() >= 2) {
+            RCLCPP_INFO(get_logger(), "going to recover area!");
+            std::tie(pose.x, pose.y) = path[1];
+            pose.x -= robot_info->our_robot_grid_pos.x;
+            pose.y -= robot_info->our_robot_grid_pos.y;
+            pose.x /= 16;
+            pose.y /= 16;
+            if (!robot_info->enemy_grid_pos_vec.empty()) {
+                int32_t dy = static_cast<int32_t>(robot_info->enemy_real_pos_vec[0].y) - static_cast<int32_t>(robot_info->our_robot_real_pos.y);
+                int32_t dx = static_cast<int32_t>(robot_info->enemy_real_pos_vec[0].x) - static_cast<int32_t>(robot_info->our_robot_real_pos.x);
+                pose.theta = std::atan2(dy, dx);
+
+                example_interfaces::msg::Bool shoot;
+                int distance = algorithm::manhattan_distance(robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, robot_info->enemy_real_pos_vec[0].x, robot_info->enemy_real_pos_vec[0].y);
+                if (constant::attack_distance > distance && m_bullet_num > 0) {
+                    shoot.data = true;
+                    m_bullet_num -= 1;
+                    RCLCPP_INFO(get_logger(), "shoot!");
+                    m_shoot_publisher->publish(shoot);
+                }
+            }
+            else {
+                pose.theta = 0;
+            }
+            m_our_pose_publisher->publish(pose);
+        }
+
+        if (robot_info->our_robot_hp > m_last_hp) {
+            m_bullet_num += 20;
+        }
+        m_last_hp = robot_info->our_robot_hp;
+    }
+    else if (!robot_info->enemy_grid_pos_vec.empty())
+    {
+        algorithm::Path path = algorithm::a_star(
+            this->m_map,
+            robot_info->our_robot_grid_pos.x,
+            robot_info->our_robot_grid_pos.y,
+            robot_info->enemy_grid_pos_vec[0].x,
+            robot_info->enemy_grid_pos_vec[0].y
+        );
 
         if (path.size() >= 2) {
             std::tie(pose.x, pose.y) = path[1];
-            RCLCPP_INFO(get_logger(), "pathx:%d, pathy:%d", path[1].first, path[1].second);
-            pose.x -= robot_info->our_robot.x;
-            pose.y -= robot_info->our_robot.y;
+            pose.x -= robot_info->our_robot_grid_pos.x;
+            pose.y -= robot_info->our_robot_grid_pos.y;
             pose.x /= 16;
             pose.y /= 16;
-            pose.theta = std::atan2(robot_info->enemy[0].y - robot_info->our_robot.y, robot_info->enemy[0].x - robot_info->our_robot.x);
+            int32_t dy = static_cast<int32_t>(robot_info->enemy_real_pos_vec[0].y) - static_cast<int32_t>(robot_info->our_robot_real_pos.y);
+            int32_t dx = static_cast<int32_t>(robot_info->enemy_real_pos_vec[0].x) - static_cast<int32_t>(robot_info->our_robot_real_pos.x);
+            pose.theta = std::atan2(dy, dx);
             RCLCPP_INFO(get_logger(), "posex:%lf, posey:%lf theta:%lf", pose.x, pose.y, pose.theta);
             m_our_pose_publisher->publish(pose);
+
+            example_interfaces::msg::Bool shoot;
+            int distance = algorithm::manhattan_distance(robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, robot_info->enemy_real_pos_vec[0].x, robot_info->enemy_real_pos_vec[0].y);
+            if (constant::attack_distance > distance && m_bullet_num > 0) {
+                shoot.data = true;
+                m_bullet_num -= 1;
+                RCLCPP_INFO(get_logger(), "shoot!");
+                m_shoot_publisher->publish(shoot);
+            }
         }
     }
-
+    // 更新位置
+    m_last_real_x = robot_info->our_robot_real_pos.x;
+    m_last_real_y = robot_info->our_robot_real_pos.y;
 }
 
 void navigation::Node::password_cbfn(const example_interfaces::msg::Int64::SharedPtr password)

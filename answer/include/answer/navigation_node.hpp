@@ -148,8 +148,13 @@ namespace navigation {
         example_interfaces::msg::Int64 m_password;
         std::vector<example_interfaces::msg::Int64> m_password_segment_vec;
         int m_count;
-        uint32_t m_last_x;
-        uint32_t m_last_y;
+        int m_bullet_num;
+        bool m_should_stop;
+        bool m_need_recover;
+        bool m_full_recovered; // 便于控制哨兵回满血
+        double m_last_hp;
+        uint32_t m_last_real_x;
+        uint32_t m_last_real_y;
         const int m_dir[4][2]{ {-1,-1},{1,-1},{1,1},{-1,1} };
     };
 }
