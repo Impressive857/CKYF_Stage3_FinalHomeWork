@@ -1,7 +1,7 @@
 #include "navigation_node.hpp"
 
 navigation::Node::Node(const std::string& name)
-    :rclcpp::Node(name)
+    :rclcpp::Node(name), m_my_serial(constant::serial_path, constant::baud_rate)
 {
     m_count = 0;
     m_last_real_x = 0;
@@ -11,6 +11,8 @@ navigation::Node::Node(const std::string& name)
     m_should_stop = false;
     m_full_recovered = false;
     m_need_recover = false;
+    m_password_got = false;
+    m_password_segment_send = false;
     m_our_pose_publisher = this->create_publisher<geometry_msgs::msg::Pose2D>(topic_name::pose, 1);
     m_shoot_publisher = this->create_publisher<example_interfaces::msg::Bool>(topic_name::shoot, 1);
     m_password_subscription = this->create_subscription<example_interfaces::msg::Int64>(topic_name::password, 1, std::bind(&navigation::Node::password_cbfn, this, std::placeholders::_1));
@@ -44,6 +46,9 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
         {return algorithm::manhattan_distance(robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, a.x, a.y) < algorithm::manhattan_distance(robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, b.x, b.y);});
 
     geometry_msgs::msg::Pose2D pose;
+
+    if (m_password_got) RCLCPP_INFO(get_logger(), "got password!");
+    if (m_password_segment_send) RCLCPP_INFO(get_logger(), "password segment send!");
 
     // 防止卡死在一个位置
     if (robot_info->our_robot_real_pos.x == m_last_real_x && robot_info->our_robot_real_pos.y == m_last_real_y && !m_should_stop) {
@@ -80,8 +85,8 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
             std::tie(pose.x, pose.y) = path[1];
             pose.x -= robot_info->our_robot_grid_pos.x;
             pose.y -= robot_info->our_robot_grid_pos.y;
-            pose.x /= 16;
-            pose.y /= 16;
+            pose.x *= constant::speed_scale;
+            pose.y *= constant::speed_scale;
             if (!robot_info->enemy_grid_pos_vec.empty()) {
                 int32_t dy = static_cast<int32_t>(robot_info->enemy_real_pos_vec[0].y) - static_cast<int32_t>(robot_info->our_robot_real_pos.y);
                 int32_t dx = static_cast<int32_t>(robot_info->enemy_real_pos_vec[0].x) - static_cast<int32_t>(robot_info->our_robot_real_pos.x);
@@ -91,7 +96,7 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
                 int distance = algorithm::manhattan_distance(robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, robot_info->enemy_real_pos_vec[0].x, robot_info->enemy_real_pos_vec[0].y);
                 if (constant::attack_distance > distance && m_bullet_num > 0) {
                     shoot.data = true;
-                    m_bullet_num -= 1;
+                    //m_bullet_num -= 1;
                     RCLCPP_INFO(get_logger(), "shoot!");
                     m_shoot_publisher->publish(shoot);
                 }
@@ -102,10 +107,17 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
             m_our_pose_publisher->publish(pose);
         }
 
-        if (robot_info->our_robot_hp > m_last_hp) {
-            m_bullet_num += 20;
-        }
+        // if (robot_info->our_robot_hp > m_last_hp) {
+        //     m_bullet_num += 10;
+        // }
         m_last_hp = robot_info->our_robot_hp;
+    }
+    else if (m_password_segment_vec.size() >= 2) {
+        my_serial::password_send_t password_send;
+        password_send.password1 = m_password_segment_vec[0].data;
+        password_send.password2 = m_password_segment_vec[1].data;
+        m_my_serial.write_to_port(&password_send, sizeof(password_send));
+        m_password_segment_send = true;
     }
     else if (!robot_info->enemy_grid_pos_vec.empty())
     {
@@ -121,8 +133,8 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
             std::tie(pose.x, pose.y) = path[1];
             pose.x -= robot_info->our_robot_grid_pos.x;
             pose.y -= robot_info->our_robot_grid_pos.y;
-            pose.x /= 16;
-            pose.y /= 16;
+            pose.x *= constant::speed_scale;
+            pose.y *= constant::speed_scale;
             int32_t dy = static_cast<int32_t>(robot_info->enemy_real_pos_vec[0].y) - static_cast<int32_t>(robot_info->our_robot_real_pos.y);
             int32_t dx = static_cast<int32_t>(robot_info->enemy_real_pos_vec[0].x) - static_cast<int32_t>(robot_info->our_robot_real_pos.x);
             pose.theta = std::atan2(dy, dx);
@@ -133,7 +145,7 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
             int distance = algorithm::manhattan_distance(robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, robot_info->enemy_real_pos_vec[0].x, robot_info->enemy_real_pos_vec[0].y);
             if (constant::attack_distance > distance && m_bullet_num > 0) {
                 shoot.data = true;
-                m_bullet_num -= 1;
+                //m_bullet_num -= 1;
                 RCLCPP_INFO(get_logger(), "shoot!");
                 m_shoot_publisher->publish(shoot);
             }
@@ -147,6 +159,8 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
 void navigation::Node::password_cbfn(const example_interfaces::msg::Int64::SharedPtr password)
 {
     m_password = *password;
+    RCLCPP_INFO(get_logger(), "password got!!!");
+    m_password_got = true;
 }
 
 void navigation::Node::password_segment_cbfn(const example_interfaces::msg::Int64::SharedPtr password_segment)

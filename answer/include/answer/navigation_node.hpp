@@ -15,6 +15,7 @@
 #include "info_interfaces/msg/robot.hpp"
 
 #include "constant.hpp"
+#include "my_serial.hpp"
 
 namespace navigation {
     namespace algorithm {
@@ -152,9 +153,12 @@ namespace navigation {
         bool m_should_stop;
         bool m_need_recover;
         bool m_full_recovered; // 便于控制哨兵回满血
+        bool m_password_segment_send;
+        bool m_password_got;
         double m_last_hp;
         uint32_t m_last_real_x;
         uint32_t m_last_real_y;
+        my_serial::MySerial m_my_serial;
         const int m_dir[4][2]{ {-1,-1},{1,-1},{1,1},{-1,1} };
     };
 }

@@ -33,7 +33,7 @@ namespace my_serial {
         :public serial::Serial<Head, Tail>
     {
     public:
-        MySerial(std::string& port_path, speed_t baud_rate, bool is_big_endian = true)
+        MySerial(const std::string& port_path, speed_t baud_rate, bool is_big_endian = true)
             :serial::Serial<Head, Tail>(port_path, baud_rate, is_big_endian)
         {
             set_head_check([](const Head& head) {return head.SOF == FRAME_HEAD;});

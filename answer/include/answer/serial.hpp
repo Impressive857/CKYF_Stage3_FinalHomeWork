@@ -31,7 +31,7 @@ namespace serial {
             else {
                 m_is_open = true;
                 fcntl(m_fd, F_SETFL, 0);
-                if (!set_port_config(std::bind(default_port_config, this, std::placeholders::_1))) {
+                if (!set_port_config(std::bind(&serial::Serial<_Head, _Tail>::default_port_config, this, std::placeholders::_1))) {
                     std::cerr << "fail to init port " << m_port_path << " 's config\n";
                     m_is_open = false;
                     close(m_fd);
@@ -211,7 +211,7 @@ namespace serial {
         /// @brief 获取默认串口属性函数
         /// @return 默认串口属性函数
         std::function<void(struct termios&)> get_default_port_config_fn() {
-            return std::bind(&default_port_config, this, std::placeholders::_1);
+            return std::bind(&serial::Serial<_Head, _Tail>::default_port_config, this, std::placeholders::_1);
         }
         /// @brief 设置头校验函数
         /// @param check_fn 头校验函数
@@ -277,12 +277,12 @@ namespace serial {
         }
     private:
         std::string m_port_path;                                    // 串口路径
+        speed_t m_baud_rate;                                        // 波特率
+        bool m_is_big_endian;                                       // 是否是大端字节序
         int m_fd;                                                   // 串口唯一标识
         bool m_is_ok;                                               // 标识串口是否正常
         bool m_is_open;                                             // 标识串口是否打开
-        bool m_is_big_endian;                                       // 是否是大端字节序
         struct termios m_options;                                   // 串口选项
-        speed_t m_baud_rate;                                        // 波特率
         _Head m_head;                                               // 帧头
         _Tail m_tail;                                               // 帧尾
         std::function<bool(const _Head&)> m_head_check_fn;          // 头校验函数
