@@ -91,10 +91,7 @@ namespace serial {
         /// @param data 读取的数据
         /// @param length 读取的长度
         /// @return 是否读取成功
-        /// @warning 传入的data指针是引用，获取数据失败时为nullptr
-        /// @warning 会在内部根据数据大小分配内存，会覆盖传入的data，最好传入nullptr
-        /// @warning 获取完数据后内存未释放，用完数据记得释放内存
-        bool read_from_port(void*& data, size_t& data_length) {
+        bool read_from_port(void* data, size_t data_length) {
             if (!m_is_open) {
                 std::cerr << "fail to read, port is not open!\n";
                 return false;
@@ -103,65 +100,37 @@ namespace serial {
                 std::cerr << "fail to read, port is not ok!\n";
                 return false;
             }
-            if (nullptr != data) {
-                delete data;
-                data = nullptr;
-            }
 
             char head_buffer[sizeof(m_head)];
-            ssize_t head_read_length = read(m_fd, head_buffer, sizeof(m_head));
-            if (sizeof(m_head) != head_read_length) {
+            ssize_t head_read_length = read(m_fd, &head_buffer, sizeof(m_head));
+            if (sizeof(m_head) != static_cast<size_t>(head_read_length)) {
                 std::cerr << "fail to read head!";
                 return false;
             }
-
-            std::memcpy(&m_head, head_buffer, sizeof(m_head));
-
-            if (!m_head_check_fn(m_head)) {
+            _Head* temp_head = reinterpret_cast<_Head*>(head_buffer);
+            if (!m_head_check_fn(*temp_head)) {
                 std::cerr << "head check is not accessed!";
                 return false;
             }
 
             data_length = m_get_length_fn(m_head);
 
-            data = new char[data_length];
-
             ssize_t data_read_length = read(m_fd, data, data_length);
-            if (data_length != data_read_length) {
+            if (data_length != static_cast<size_t>(data_read_length)) {
                 std::cerr << "fail to read data!";
-
-                // 读取数据失败要及时释放内存
-                delete data;
-                data = nullptr;
-
-                data_length = 0;
-
                 return false;
             }
 
             char tail_buffer[sizeof(m_tail)];
-            ssize_t tail_read_length = read(m_fd, tail_buffer, sizeof(m_tail));
-            if (sizeof(m_tail) != tail_read_length) {
+            ssize_t tail_read_length = read(m_fd, &tail_buffer, sizeof(m_tail));
+            if (sizeof(m_tail) != static_cast<size_t>(tail_read_length)) {
                 std::cerr << "fail to read tail!";
-
-                // 读取数据失败要及时释放内存
-                delete data;
-                data = nullptr;
-
-                data_length = 0;
-
                 return false;
             }
 
-            if (!m_tail_check_fn(m_tail)) {
+            _Tail* temp_tail = reinterpret_cast<_Tail*>(tail_buffer);
+            if (!m_tail_check_fn(*temp_tail)) {
                 std::cerr << "tail check is not accessed!";
-
-                // 读取数据失败要及时释放内存
-                delete data;
-                data = nullptr;
-
-                data_length = 0;
-
                 return false;
             }
 
@@ -235,12 +204,12 @@ namespace serial {
         }
         /// @brief 设置设置数据长度函数
         /// @param get_fn 设置数据长度函数
-        void set_set_length(std::function<void(_Head&, size_t length)> set_fn){
+        void set_set_length(std::function<void(_Head&, size_t length)> set_fn) {
             m_set_length_fn = set_fn;
         }
         /// @brief 设置设置命令字函数
         /// @param get_fn 设置命令字函数
-        void set_set_cmd_id(std::function<void(_Head&, int cmd_id)> set_fn){
+        void set_set_cmd_id(std::function<void(_Head&, int cmd_id)> set_fn) {
             m_set_cmd_id_fn = set_fn;
         }
     private:

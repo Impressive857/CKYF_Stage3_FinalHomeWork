@@ -134,12 +134,11 @@ namespace navigation {
         void map_init_cbfn(const info_interfaces::msg::Map::SharedPtr map_info);
         void area_init_cbfn(const info_interfaces::msg::Area::SharedPtr area_info);
         void robot_navigation_cbfn(const info_interfaces::msg::Robot::SharedPtr robot_info);
-        void password_cbfn(const example_interfaces::msg::Int64::SharedPtr password);
         void password_segment_cbfn(const example_interfaces::msg::Int64::SharedPtr password_segment);
     private:
         rclcpp::Publisher<geometry_msgs::msg::Pose2D>::SharedPtr m_our_pose_publisher;
         rclcpp::Publisher<example_interfaces::msg::Bool>::SharedPtr m_shoot_publisher;
-        rclcpp::Subscription<example_interfaces::msg::Int64>::SharedPtr m_password_subscription;
+        rclcpp::Publisher<example_interfaces::msg::Int64>::SharedPtr m_password_publisher;
         rclcpp::Subscription<example_interfaces::msg::Int64>::SharedPtr m_password_segment_subscription;
         rclcpp::Subscription<info_interfaces::msg::Map>::SharedPtr m_map_subscription;
         rclcpp::Subscription<info_interfaces::msg::Area>::SharedPtr m_area_subscription;
@@ -153,8 +152,9 @@ namespace navigation {
         bool m_should_stop;
         bool m_need_recover;
         bool m_full_recovered; // 便于控制哨兵回满血
-        bool m_password_segment_send;
-        bool m_password_got;
+        bool m_password_segment_has_sent;
+        bool m_password_has_got;
+        bool m_password_has_sent;
         double m_last_hp;
         uint32_t m_last_real_x;
         uint32_t m_last_real_y;

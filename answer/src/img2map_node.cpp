@@ -213,7 +213,7 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         }
 
         // 将robot发送到寻路模块
-        RCLCPP_INFO(get_logger(), "robot has been send!");
+        // RCLCPP_INFO(get_logger(), "robot has been send!");
         m_robot_publisher->publish(robot);
     }
 }
@@ -250,7 +250,7 @@ std::pair<std::vector<cv::Point>, std::vector<cv::Rect>> img2map::Node::get_area
         if (m.m00 != 0) {
             int x = static_cast<int>(m.m10 / m.m00);
             int y = static_cast<int>(m.m01 / m.m00);
-            RCLCPP_INFO(get_logger(), "%s x:%d y:%d w:%d h:%d", area_name.c_str(), x, y, rect.width, rect.height);
+            // RCLCPP_INFO(get_logger(), "%s x:%d y:%d w:%d h:%d", area_name.c_str(), x, y, rect.width, rect.height);
             point_vec.push_back(cv::Point(x, y));
         }
     }
