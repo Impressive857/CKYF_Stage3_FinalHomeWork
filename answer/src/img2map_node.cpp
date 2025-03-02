@@ -5,9 +5,11 @@ img2map::Node::Node(const std::string& name)
 {
     m_initialized = false;
     m_hp_block_width = 0;
+    m_restart_info.data = true;
     m_map_publisher = this->create_publisher<info_interfaces::msg::Map>(topic_name::map, 1);
     m_area_publisher = this->create_publisher<info_interfaces::msg::Area>(topic_name::area, 1);
     m_robot_publisher = this->create_publisher<info_interfaces::msg::Robot>(topic_name::robot, 1);
+    m_restart_publisher = this->create_publisher<example_interfaces::msg::Bool>(topic_name::restart, 1);
     m_img_subscription = this->create_subscription<sensor_msgs::msg::Image>("image_raw", 10, std::bind(&img2map::Node::img2map_cbfn, this, std::placeholders::_1));
 }
 
@@ -33,6 +35,7 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         std::tie(center_pos_vec, border_rect_vec) = get_area("password", cv_raw_img->image, lower, upper, 20, 20, 100, 100);
         if (center_pos_vec.empty() || border_rect_vec.empty()) {
             RCLCPP_INFO(get_logger(), "failed to get password area!");
+            publish_restart_info();
             return;
         }
         area.password_grid_pos.x = center_pos_vec[0].x / grid_width;
@@ -45,6 +48,7 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         std::tie(center_pos_vec, border_rect_vec) = get_area("recover", cv_raw_img->image, lower, upper, 20, 20, 100, 100);
         if (center_pos_vec.empty() || border_rect_vec.empty()) {
             RCLCPP_INFO(get_logger(), "failed to get recover area!");
+            publish_restart_info();
             return;
         }
         area.recover_grid_pos.x = center_pos_vec[0].x / grid_width;
@@ -57,6 +61,7 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         std::tie(center_pos_vec, border_rect_vec) = get_area("base", cv_raw_img->image, lower, upper, 10, 10, 100, 100);
         if (center_pos_vec.empty() || border_rect_vec.empty()) {
             RCLCPP_INFO(get_logger(), "failed to get base area!");
+            publish_restart_info();
             return;
         }
         area.base_grid_pos.x = center_pos_vec[0].x / grid_width;
@@ -69,6 +74,7 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         std::tie(center_pos_vec, border_rect_vec) = get_area("purple", cv_raw_img->image, lower, upper, 0, 0, 100, 100);
         if (center_pos_vec.size() < 2 || border_rect_vec.size() < 2) {
             RCLCPP_INFO(get_logger(), "failed to get purple area!");
+            publish_restart_info();
             return;
         }
         if (border_rect_vec[0].width > border_rect_vec[1].width) {
@@ -91,6 +97,7 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         std::tie(center_pos_vec, border_rect_vec) = get_area("green", cv_raw_img->image, lower, upper, 0, 0, 100, 100);
         if (center_pos_vec.size() < 2 || border_rect_vec.size() < 2) {
             RCLCPP_INFO(get_logger(), "failed to get green area!");
+            publish_restart_info();
             return;
         }
         if (border_rect_vec[0].width > border_rect_vec[1].width) {
@@ -116,6 +123,7 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         std::tie(center_pos_vec, border_rect_vec) = get_area("our robot hp", cv_raw_img->image, lower, upper, 0, 0, 1000, 1000);
         if (center_pos_vec.empty() || border_rect_vec.empty()) {
             RCLCPP_INFO(get_logger(), "failed to get our robot hp!");
+            publish_restart_info();
             return;
         }
         m_hp_block_width = border_rect_vec[0].width;
@@ -162,9 +170,10 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         // rgb(89,170,240)
         lower = cv::Scalar(85, 165, 235);
         upper = cv::Scalar(93, 175, 245);
-        std::tie(center_pos_vec, border_rect_vec) = get_area("our robot", cv_raw_img->image, lower, upper, 0, 0, 100, 100);
+        std::tie(center_pos_vec, border_rect_vec) = get_robot("our robot", cv_raw_img->image, lower, upper, 0, 0, 100, 100);
         if (center_pos_vec.empty() || border_rect_vec.empty()) {
             RCLCPP_INFO(get_logger(), "failed to get our robot pos!");
+            publish_restart_info();
             m_initialized = false;
             return;
         }
@@ -180,10 +189,11 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         // rgb(131,131,131)
         lower = cv::Scalar(125, 125, 125);
         upper = cv::Scalar(137, 137, 137);
-        std::tie(center_pos_vec, border_rect_vec) = get_area("our robot hp", cv_raw_img->image, lower, upper, 0, 0, 1000, 1000);
+        std::tie(center_pos_vec, border_rect_vec) = get_robot("our robot hp", cv_raw_img->image, lower, upper, 0, 0, 1000, 1000);
         if (center_pos_vec.empty() || border_rect_vec.empty() || 0 == m_hp_block_width) {
             RCLCPP_INFO(get_logger(), "failed to get our robot current hp! width%d", m_hp_block_width);
             m_initialized = false;
+            publish_restart_info();
             return;
         }
         robot.our_robot_hp = static_cast<double>(border_rect_vec[0].width) / static_cast<double>(m_hp_block_width);
@@ -192,10 +202,11 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         // rgb(255,104,104)
         lower = cv::Scalar(250, 100, 100);
         upper = cv::Scalar(255, 108, 108);
-        std::tie(center_pos_vec, border_rect_vec) = get_area("enemy robot", cv_raw_img->image, lower, upper, 0, 0, 50, 50);
+        std::tie(center_pos_vec, border_rect_vec) = get_robot("enemy robot", cv_raw_img->image, lower, upper, 0, 0, 50, 50);
         if (center_pos_vec.empty() || border_rect_vec.empty()) {
             RCLCPP_INFO(get_logger(), "failed to get enemy robot!");
             m_initialized = false;
+            publish_restart_info();
             return;
         }
         for (size_t i = 0; i < center_pos_vec.size();i++) {
@@ -250,12 +261,61 @@ std::pair<std::vector<cv::Point>, std::vector<cv::Rect>> img2map::Node::get_area
         if (m.m00 != 0) {
             int x = static_cast<int>(m.m10 / m.m00);
             int y = static_cast<int>(m.m01 / m.m00);
-            // RCLCPP_INFO(get_logger(), "%s x:%d y:%d w:%d h:%d", area_name.c_str(), x, y, rect.width, rect.height);
+            if constexpr (debug_option::print_area_info) {
+                RCLCPP_INFO(get_logger(), "%s x:%d y:%d w:%d h:%d", area_name.c_str(), x, y, rect.width, rect.height);
+            }
             point_vec.push_back(cv::Point(x, y));
         }
     }
 
     return { point_vec, rect_vec };
+}
+
+std::pair<std::vector<cv::Point>, std::vector<cv::Rect>> img2map::Node::get_robot(const std::string& robot_name, cv::InputArray image, cv::Scalar lower, cv::Scalar upper, int min_width, int min_height, int max_width, int max_height)
+{
+    cv::Mat binary; // 存储二值化图片
+    cv::inRange(image, lower, upper, binary);
+    // 对图像进行去噪操作
+    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5));
+    cv::erode(binary, binary, kernel);
+    cv::dilate(binary, binary, kernel);
+
+    // 查找轮廓
+    std::vector<std::vector<cv::Point>> contours; // 存储轮廓
+    cv::findContours(binary, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_NONE);
+    std::vector<cv::Point> point_vec;
+    std::vector<cv::Rect> rect_vec;
+
+    // 遍历每个轮廓
+    for (size_t i = 0; i < contours.size(); ++i) {
+        // 计算轮廓的矩
+        cv::Moments m = cv::moments(contours[i], false);
+
+
+        // 获取区域的边界矩形
+        cv::Rect rect = cv::boundingRect(contours[i]);
+
+        // 去掉不符合大小的
+        if (rect.width < min_width || rect.height < min_height || rect.width > max_width || rect.height > max_height) continue;
+
+        rect_vec.push_back(rect);
+        // 计算中心位置
+        if (m.m00 != 0) {
+            int x = static_cast<int>(m.m10 / m.m00);
+            int y = static_cast<int>(m.m01 / m.m00);
+            if constexpr (debug_option::print_robot_info) {
+                RCLCPP_INFO(get_logger(), "%s x:%d y:%d w:%d h:%d", robot_name.c_str(), x, y, rect.width, rect.height);
+            }
+            point_vec.push_back(cv::Point(x, y));
+        }
+    }
+
+    return { point_vec, rect_vec };
+}
+
+void img2map::Node::publish_restart_info()
+{
+    m_restart_publisher->publish(m_restart_info);
 }
 
 int main(int argc, char** argv) {

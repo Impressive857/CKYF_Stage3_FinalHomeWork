@@ -135,6 +135,8 @@ namespace navigation {
         void area_init_cbfn(const info_interfaces::msg::Area::SharedPtr area_info);
         void robot_navigation_cbfn(const info_interfaces::msg::Robot::SharedPtr robot_info);
         void password_segment_cbfn(const example_interfaces::msg::Int64::SharedPtr password_segment);
+        void password_got_cbfn(const my_serial::password_receive_t& password_receive);
+        void restart_cbfn(const example_interfaces::msg::Bool::SharedPtr restart_info);
     private:
         rclcpp::Publisher<geometry_msgs::msg::Pose2D>::SharedPtr m_our_pose_publisher;
         rclcpp::Publisher<example_interfaces::msg::Bool>::SharedPtr m_shoot_publisher;
@@ -143,6 +145,7 @@ namespace navigation {
         rclcpp::Subscription<info_interfaces::msg::Map>::SharedPtr m_map_subscription;
         rclcpp::Subscription<info_interfaces::msg::Area>::SharedPtr m_area_subscription;
         rclcpp::Subscription<info_interfaces::msg::Robot>::SharedPtr m_robot_subscription;
+        rclcpp::Subscription<example_interfaces::msg::Bool>::SharedPtr m_restart_subscription;
         info_interfaces::msg::Area m_area;
         info_interfaces::msg::Map::SharedPtr m_map;
         example_interfaces::msg::Int64 m_password;
@@ -151,14 +154,14 @@ namespace navigation {
         int m_bullet_num;
         bool m_should_stop;
         bool m_need_recover;
-        bool m_full_recovered; // 便于控制哨兵回满血
         bool m_password_segment_has_sent;
         bool m_password_has_got;
         bool m_password_has_sent;
         double m_last_hp;
         uint32_t m_last_real_x;
         uint32_t m_last_real_y;
-        my_serial::MySerial m_my_serial;
+        my_serial::MySerial m_serial;
+        my_serial::password_receive_t m_password_receive;
         const int m_dir[4][2]{ {-1,-1},{1,-1},{1,1},{-1,1} };
     };
 }

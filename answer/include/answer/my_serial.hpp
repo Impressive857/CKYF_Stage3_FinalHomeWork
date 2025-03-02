@@ -1,14 +1,16 @@
 #ifndef _MY_SERIAL_HPP_
 #define _MY_SERIAL_HPP_
 
-#include "serial.hpp"
+#include "../serialPro/serialPro.h"
 
 #include "example_interfaces/msg/u_int64.hpp"
 #include "example_interfaces/msg/int64.hpp"
 
 namespace my_serial {
-    const uint64_t FRAME_HEAD = 0xAA;
-    const uint64_t FRAME_TAIL = 0xBB;
+    constexpr uint64_t FRAME_HEAD = 0xAA;
+    constexpr uint64_t FRAME_TAIL = 0xBB;
+    constexpr uint64_t CMD_WRITE = 0x00;
+    constexpr uint64_t CMD_READ = 0x01;
 
     struct Head {
         uint64_t SOF = FRAME_HEAD;    // 帧头
@@ -30,18 +32,20 @@ namespace my_serial {
     };
 
     class MySerial
-        :public serial::Serial<Head, Tail>
+        :public sp::serialPro<Head, Tail>
     {
     public:
-        MySerial(const std::string& port_path, speed_t baud_rate, bool is_big_endian = true)
-            :serial::Serial<Head, Tail>(port_path, baud_rate, is_big_endian)
+        MySerial(const std::string& port_path, int baud_rate)
+            :sp::serialPro<Head, Tail>(port_path, baud_rate)
         {
-            set_head_check([](const Head& head) {return head.SOF == FRAME_HEAD;});
-            set_tail_check([](const Tail& tail) {return tail.crc16 == FRAME_TAIL;});
-            set_get_cmd_id([](const Head& head) {return head.cmd_id;});
-            set_get_length([](const Head& head) {return head.length;});
-            set_set_length([](Head& head, uint64_t length) { head.length = length;});
-            set_set_cmd_id([](Head& head, uint64_t cmd_id) {head.cmd_id = cmd_id;});
+            registerChecker([](const Head& head)->int {return head.SOF != FRAME_HEAD;});
+            registerChecker([](const Tail& tail, const uint8_t*, const int&)->int {return tail.crc16 != FRAME_TAIL;});
+            setGetId([](const Head& head)->int {return head.cmd_id;});
+            setGetLength([](const Head& head)->int {return static_cast<int>(head.length);});
+        }
+        template<typename _Ty>
+        bool write(const _Ty& data) {
+            return sp::serialPro<Head, Tail>::write({ FRAME_HEAD,sizeof(data),CMD_WRITE }, data);
         }
     public:
     private:

@@ -15,6 +15,8 @@ file(GLOB_RECURSE EXEC_INCLUDE ${EXEC_INCLUDE_DIR}/*.h)
 set(EXEC_DEPEND rclcpp OpenCV cv_bridge sensor_msgs geometry_msgs example_interfaces info_interfaces)
 set(ALL_EXEC img2map_node navigation_node)
 
+add_subdirectory(${EXEC_INCLUDE_DIR}/thirdparty/serialib)
+
 # find dependencies
 find_package(ament_cmake_auto REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -29,11 +31,16 @@ ament_auto_find_build_dependencies()
 # find_package(<dependency> REQUIRED)
 
 include_directories(${EXEC_INCLUDE_DIR}/${PROJECT_NAME})
+include_directories(${EXEC_INCLUDE_DIR}/msg_serializer)
+include_directories(${EXEC_INCLUDE_DIR}/serialPro)
+include_directories(${EXEC_INCLUDE_DIR}/thirdparty)
+include_directories(${EXEC_INCLUDE_DIR}/thirdparty/serialib)
 
 ament_auto_add_executable(img2map_node ${EXEC_SRC_DIR}/img2map_node.cpp)
 ament_target_dependencies(img2map_node ${EXEC_DEPEND})
 
 ament_auto_add_executable(navigation_node ${EXEC_SRC_DIR}/navigation_node.cpp)
+target_link_libraries(navigation_node serialib)
 ament_target_dependencies(navigation_node ${EXEC_DEPEND})
 
 install(TARGETS ${ALL_EXEC} DESTINATION lib/${PROJECT_NAME})
