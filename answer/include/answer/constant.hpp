@@ -4,8 +4,10 @@
 #include <string>
 
 namespace topic_name{
-    const char* map = "map_topic";
-    const char* area = "area";
+    const char* grid_map = "grid_map";
+    const char* real_map = "real_map";
+    const char* grid_area = "grid_area";
+    const char* real_area = "real_area";
     const char* robot = "robot";
     const char* pose = "pose";
     const char* shoot = "shoot";
@@ -18,6 +20,7 @@ namespace constant{
     constexpr int grid_num_v = 256; // 水平方向网格数量
     constexpr int grid_num_h = 128; // 垂直方向网格数量
     constexpr int attack_distance = 80; // 攻击距离,敌人在攻击距离内再攻击
+    constexpr int stop_distance = 30;
     constexpr double danger_hp = 0.9; // 生命值低于这个值就要补充
     constexpr int danger_bullet_num = 5; // 子弹低于这个值就要补充
     constexpr double speed_scale = 1.0 / 32.0; // 速度缩放比例
@@ -27,7 +30,7 @@ namespace constant{
 
 namespace debug_option{
     constexpr bool print_our_pose = false;
-    constexpr bool print_area_info = false;
+    constexpr bool print_area_info = true;
     constexpr bool print_robot_info = false;
 }
 

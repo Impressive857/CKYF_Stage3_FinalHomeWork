@@ -13,34 +13,56 @@ navigation::Node::Node(const std::string& name)
     m_password_has_got = false;
     m_password_segment_has_sent = false;
     m_password_has_sent = false;
+    m_grid_map_has_got = false;
+    m_real_map_has_got = false;
+    m_grid_area_has_got = false;
+    m_real_area_has_got = false;
     m_serial.spin(true);
     m_serial.registerCallback(my_serial::CMD_READ, std::function<void(const my_serial::password_receive_t&)>(std::bind(&navigation::Node::password_got_cbfn, this, std::placeholders::_1)));
     m_our_pose_publisher = this->create_publisher<geometry_msgs::msg::Pose2D>(topic_name::pose, 1);
     m_shoot_publisher = this->create_publisher<example_interfaces::msg::Bool>(topic_name::shoot, 1);
     m_password_publisher = this->create_publisher<example_interfaces::msg::Int64>(topic_name::password, 1);
     m_password_segment_subscription = this->create_subscription<example_interfaces::msg::Int64>(topic_name::password_segment, 1, std::bind(&navigation::Node::password_segment_cbfn, this, std::placeholders::_1));
-    m_map_subscription = this->create_subscription<info_interfaces::msg::Map>(topic_name::map, 1, std::bind(&navigation::Node::map_init_cbfn, this, std::placeholders::_1));
-    m_area_subscription = this->create_subscription<info_interfaces::msg::Area>(topic_name::area, 1, std::bind(&navigation::Node::area_init_cbfn, this, std::placeholders::_1));
+    m_grid_map_subscription = this->create_subscription<info_interfaces::msg::Map>(topic_name::grid_map, 1, std::bind(&navigation::Node::grid_map_init_cbfn, this, std::placeholders::_1));
+    m_real_map_subscription = this->create_subscription<info_interfaces::msg::Map>(topic_name::real_map, 1, std::bind(&navigation::Node::real_map_init_cbfn, this, std::placeholders::_1));
+    m_grid_area_subscription = this->create_subscription<info_interfaces::msg::Area>(topic_name::grid_area, 1, std::bind(&navigation::Node::grid_area_init_cbfn, this, std::placeholders::_1));
+    m_real_area_subscription = this->create_subscription<info_interfaces::msg::Area>(topic_name::real_area, 1, std::bind(&navigation::Node::real_area_init_cbfn, this, std::placeholders::_1));
     m_robot_subscription = this->create_subscription<info_interfaces::msg::Robot>(topic_name::robot, 1, std::bind(&navigation::Node::robot_navigation_cbfn, this, std::placeholders::_1));
     m_restart_subscription = this->create_subscription<example_interfaces::msg::Bool>(topic_name::restart, 1, std::bind(&navigation::Node::restart_cbfn, this, std::placeholders::_1));
 }
 
-void navigation::Node::map_init_cbfn(const info_interfaces::msg::Map::SharedPtr map_info)
+void navigation::Node::grid_map_init_cbfn(const info_interfaces::msg::Map::SharedPtr map_info)
 {
-    RCLCPP_INFO(get_logger(), "map got!");
-    m_map = map_info;
+    RCLCPP_INFO(get_logger(), "grid_map got!");
+    m_grid_map = map_info;
+    m_grid_map_has_got = true;
 }
 
-void navigation::Node::area_init_cbfn(const info_interfaces::msg::Area::SharedPtr area_info)
+void navigation::Node::real_map_init_cbfn(const info_interfaces::msg::Map::SharedPtr map_info)
 {
-    RCLCPP_INFO(get_logger(), "area got!");
-    m_area = *area_info;
+    RCLCPP_INFO(get_logger(), "real_map got!");
+    m_real_map = map_info;
+    m_real_map_has_got = true;
+}
+
+void navigation::Node::grid_area_init_cbfn(const info_interfaces::msg::Area::SharedPtr area_info)
+{
+    RCLCPP_INFO(get_logger(), "grid area got!");
+    m_grid_area_has_got = true;
+    m_grid_area = area_info;
+}
+
+void navigation::Node::real_area_init_cbfn(const info_interfaces::msg::Area::SharedPtr area_info)
+{
+    RCLCPP_INFO(get_logger(), "real area got!");
+    m_real_area = area_info;
+    m_real_area_has_got = true;
 }
 
 void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::SharedPtr robot_info)
 {
-    if (!this->m_map.use_count()) return;
-
+    if (!this->m_grid_map.use_count()) return;
+    if (!this->m_real_map.use_count()) return;
 
     // 按网格距离对敌人排序
     std::sort(robot_info->enemy_grid_pos_vec.begin(), robot_info->enemy_grid_pos_vec.end(), [&robot_info](const info_interfaces::msg::Point& a, const info_interfaces::msg::Point& b)
@@ -67,18 +89,18 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
         m_count %= 4;
         m_our_pose_publisher->publish(pose);
     }
-    else if (robot_info->our_robot_hp < constant::danger_hp || m_need_recover || m_bullet_num < constant::danger_bullet_num) {
+    else if ((robot_info->our_robot_hp < constant::danger_hp || m_need_recover || m_bullet_num < constant::danger_bullet_num) && m_password_segment_vec.size() < 2) {
         m_need_recover = true;
         if (robot_info->our_robot_hp >= 1.0) {
             m_need_recover = false;
             return;
         }
         algorithm::Path path = algorithm::a_star(
-            this->m_map,
+            this->m_grid_map,
             robot_info->our_robot_grid_pos.x,
             robot_info->our_robot_grid_pos.y,
-            m_area.recover_grid_pos.x,
-            m_area.recover_grid_pos.y
+            m_grid_area->recover_pos.x,
+            m_grid_area->recover_pos.y
         );
 
         if (path.size() >= 2) {
@@ -94,7 +116,7 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
                 pose.theta = std::atan2(dy, dx);
 
                 example_interfaces::msg::Bool shoot;
-                if (algorithm::can_connect(m_map, robot_info->our_robot_grid_pos.x, robot_info->our_robot_grid_pos.y, robot_info->enemy_grid_pos_vec[0].x, robot_info->enemy_grid_pos_vec[0].y)) {
+                if (algorithm::can_connect(m_real_map, robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, robot_info->enemy_real_pos_vec[0].x, robot_info->enemy_real_pos_vec[0].y)) {
                     shoot.data = true;
                     m_shoot_publisher->publish(shoot);
                 }
@@ -119,12 +141,95 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
         RCLCPP_INFO(get_logger(), "password segment has sent!");
     }
     else if (m_password_segment_has_sent && m_password_has_got) {
-
+        algorithm::Path path;
+        // 机器人和密码发射区无法直线到达，说明未进入密码发射区
+        if (!algorithm::can_connect(m_real_map, robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, m_real_area->password_pos.x, m_real_area->password_pos.y) && !m_password_has_sent) {
+            if (algorithm::manhattan_distance(robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, m_real_area->enter_gate_pos.x, m_real_area->enter_gate_pos.y) < constant::stop_distance) {
+                m_should_stop = true;
+                pose.x = 0;
+                pose.y = 0;
+                pose.theta = 0;
+                m_our_pose_publisher->publish(pose);
+                return;
+            }
+            else {
+                m_should_stop = false;
+                path = algorithm::a_star(
+                    this->m_grid_map,
+                    robot_info->our_robot_grid_pos.x,
+                    robot_info->our_robot_grid_pos.y,
+                    m_grid_area->enter_gate_pos.x,
+                    m_grid_area->enter_gate_pos.y
+                );
+            }
+        }
+        else if (!m_password_has_sent) {
+            path = algorithm::a_star(
+                this->m_grid_map,
+                robot_info->our_robot_grid_pos.x,
+                robot_info->our_robot_grid_pos.y,
+                m_grid_area->password_pos.x,
+                m_grid_area->password_pos.y
+            );
+            if (algorithm::manhattan_distance(robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, m_real_area->password_pos.x, m_real_area->password_pos.y) < constant::stop_distance) {
+                m_password_publisher->publish(m_password);
+                RCLCPP_INFO(get_logger(), "password has send!");
+                m_password_has_sent = true;
+            }
+        }
+        else if (m_password_has_sent && algorithm::can_connect(m_real_map, robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, m_real_area->exit_gate_pos.x, m_real_area->exit_gate_pos.y)) {
+            if (algorithm::manhattan_distance(robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, m_real_area->exit_gate_pos.x, m_real_area->exit_gate_pos.y) < constant::stop_distance) {
+                m_should_stop = true;
+                pose.x = 0;
+                pose.y = 0;
+                pose.theta = 0;
+                m_our_pose_publisher->publish(pose);
+                return;
+            }
+            else {
+                m_should_stop = false;
+                path = algorithm::a_star(
+                    this->m_grid_map,
+                    robot_info->our_robot_grid_pos.x,
+                    robot_info->our_robot_grid_pos.y,
+                    m_grid_area->exit_gate_pos.y,
+                    m_grid_area->exit_gate_pos.y
+                );
+            }
+        }
+        else {
+            path = algorithm::a_star(
+                this->m_grid_map,
+                robot_info->our_robot_grid_pos.x,
+                robot_info->our_robot_grid_pos.y,
+                m_grid_area->base_pos.x,
+                m_grid_area->base_pos.y
+            );
+            example_interfaces::msg::Bool shoot;
+            if (algorithm::can_connect(m_real_map, robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, m_real_area->base_pos.x, m_real_area->base_pos.y)) {
+                shoot.data = true;
+                m_shoot_publisher->publish(shoot);
+            }
+            int32_t dy = static_cast<int32_t>(m_real_area->base_pos.y) - static_cast<int32_t>(robot_info->our_robot_real_pos.y);
+            int32_t dx = static_cast<int32_t>(m_real_area->base_pos.x) - static_cast<int32_t>(robot_info->our_robot_real_pos.x);
+            pose.theta = std::atan2(dy, dx);
+        }
+        if (path.size() >= 2) {
+            std::tie(pose.x, pose.y) = path[1];
+            pose.x -= robot_info->our_robot_grid_pos.x;
+            pose.y -= robot_info->our_robot_grid_pos.y;
+            pose.x *= constant::speed_scale;
+            pose.y *= constant::speed_scale;
+            if constexpr (debug_option::print_our_pose) {
+                RCLCPP_INFO(get_logger(), "posex:%lf, posey:%lf theta:%lf", pose.x, pose.y, pose.theta);
+            }
+            m_our_pose_publisher->publish(pose);
+        }
     }
     else if (!robot_info->enemy_grid_pos_vec.empty())
     {
         algorithm::Path path = algorithm::a_star(
-            this->m_map,
+            this->m_grid_map,
             robot_info->our_robot_grid_pos.x,
             robot_info->our_robot_grid_pos.y,
             robot_info->enemy_grid_pos_vec[0].x,
@@ -146,14 +251,7 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
             m_our_pose_publisher->publish(pose);
 
             example_interfaces::msg::Bool shoot;
-            // int distance = algorithm::manhattan_distance(robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, robot_info->enemy_real_pos_vec[0].x, robot_info->enemy_real_pos_vec[0].y);
-            // if (constant::attack_distance > distance && m_bullet_num > 0) {
-            //     shoot.data = true;
-            //     //m_bullet_num -= 1;
-            //     //RCLCPP_INFO(get_logger(), "shoot!");
-            //     m_shoot_publisher->publish(shoot);
-            // }
-            if (algorithm::can_connect(m_map, robot_info->our_robot_grid_pos.x, robot_info->our_robot_grid_pos.y, robot_info->enemy_grid_pos_vec[0].x, robot_info->enemy_grid_pos_vec[0].y)) {
+            if (algorithm::can_connect(m_real_map, robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, robot_info->enemy_real_pos_vec[0].x, robot_info->enemy_real_pos_vec[0].y)) {
                 shoot.data = true;
                 m_shoot_publisher->publish(shoot);
             }
@@ -191,6 +289,10 @@ void navigation::Node::restart_cbfn(const example_interfaces::msg::Bool::SharedP
         m_last_hp = 1.0;
         m_last_real_x = 0;
         m_last_real_y = 0;
+        m_real_area_has_got = false;
+        m_grid_area_has_got = false;
+        m_real_map_has_got = false;
+        m_grid_map_has_got = false;
     }
 }
 

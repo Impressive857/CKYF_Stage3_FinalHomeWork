@@ -12,6 +12,7 @@
 #include "example_interfaces/msg/bool.hpp"
 
 #include "constant.hpp"
+#include "algorithm.hpp"
 
 namespace img2map {
     class Node
@@ -33,8 +34,10 @@ namespace img2map {
         bool m_initialized;
         int m_hp_block_width; // 生命值条宽度
         example_interfaces::msg::Bool m_restart_info;
-        rclcpp::Publisher<info_interfaces::msg::Map>::SharedPtr m_map_publisher;
-        rclcpp::Publisher<info_interfaces::msg::Area>::SharedPtr m_area_publisher;
+        rclcpp::Publisher<info_interfaces::msg::Map>::SharedPtr m_grid_map_publisher;
+        rclcpp::Publisher<info_interfaces::msg::Map>::SharedPtr m_real_map_publisher;
+        rclcpp::Publisher<info_interfaces::msg::Area>::SharedPtr m_grid_area_publisher;
+        rclcpp::Publisher<info_interfaces::msg::Area>::SharedPtr m_real_area_publisher;
         rclcpp::Publisher<example_interfaces::msg::Bool>::SharedPtr m_restart_publisher;
         rclcpp::Publisher<info_interfaces::msg::Robot>::SharedPtr m_robot_publisher;
         rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr m_img_subscription;
