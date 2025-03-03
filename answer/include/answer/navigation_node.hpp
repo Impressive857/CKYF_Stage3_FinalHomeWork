@@ -124,6 +124,41 @@ namespace navigation {
             // 没有找到路径则返回空
             return {};
         }
+
+        bool can_connect(const info_interfaces::msg::Map::SharedPtr map, int src_x, int src_y, int dst_x, int dst_y) {
+            if (src_x < 0 || src_x >= static_cast<int>(map->col) || src_y < 0 || src_y >= static_cast<int>(map->row)
+                ||
+                dst_x < 0 || dst_x >= static_cast<int>(map->col) || dst_y < 0 || dst_y >= static_cast<int>(map->row)
+                ) {
+                return false;
+            }
+
+            // 计算两点之间的距离
+            int dx = dst_x - src_x;
+            int dy = dst_y - src_y;
+            int steps = std::max(std::abs(dx), std::abs(dy));
+
+            // 计算每一步的增量
+            double xIncrement = static_cast<double>(dx) / steps;
+            double yIncrement = static_cast<double>(dy) / steps;
+
+            // 遍历中间点
+            for (int i = 1; i < steps; ++i) {
+                double x = src_x + i * xIncrement;
+                double y = src_y + i * yIncrement;
+
+                // 取整得到中间点的坐标
+                int ix = static_cast<int>(std::round(x));
+                int iy = static_cast<int>(std::round(y));
+
+                // 检查中间点是否越界或为障碍物
+                if (ix < 0 || ix >= static_cast<int>(map->col) || iy < 0 || iy >= static_cast<int>(map->row) || map->mat[iy * map->col + ix] != 0) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
     };
     class Node
         : public rclcpp::Node

@@ -94,11 +94,8 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
                 pose.theta = std::atan2(dy, dx);
 
                 example_interfaces::msg::Bool shoot;
-                int distance = algorithm::manhattan_distance(robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, robot_info->enemy_real_pos_vec[0].x, robot_info->enemy_real_pos_vec[0].y);
-                if (constant::attack_distance > distance && m_bullet_num > 0) {
+                if (algorithm::can_connect(m_map, robot_info->our_robot_grid_pos.x, robot_info->our_robot_grid_pos.y, robot_info->enemy_grid_pos_vec[0].x, robot_info->enemy_grid_pos_vec[0].y)) {
                     shoot.data = true;
-                    //m_bullet_num -= 1;
-                    //RCLCPP_INFO(get_logger(), "shoot!");
                     m_shoot_publisher->publish(shoot);
                 }
             }
@@ -149,11 +146,15 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
             m_our_pose_publisher->publish(pose);
 
             example_interfaces::msg::Bool shoot;
-            int distance = algorithm::manhattan_distance(robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, robot_info->enemy_real_pos_vec[0].x, robot_info->enemy_real_pos_vec[0].y);
-            if (constant::attack_distance > distance && m_bullet_num > 0) {
+            // int distance = algorithm::manhattan_distance(robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, robot_info->enemy_real_pos_vec[0].x, robot_info->enemy_real_pos_vec[0].y);
+            // if (constant::attack_distance > distance && m_bullet_num > 0) {
+            //     shoot.data = true;
+            //     //m_bullet_num -= 1;
+            //     //RCLCPP_INFO(get_logger(), "shoot!");
+            //     m_shoot_publisher->publish(shoot);
+            // }
+            if (algorithm::can_connect(m_map, robot_info->our_robot_grid_pos.x, robot_info->our_robot_grid_pos.y, robot_info->enemy_grid_pos_vec[0].x, robot_info->enemy_grid_pos_vec[0].y)) {
                 shoot.data = true;
-                //m_bullet_num -= 1;
-                //RCLCPP_INFO(get_logger(), "shoot!");
                 m_shoot_publisher->publish(shoot);
             }
         }
