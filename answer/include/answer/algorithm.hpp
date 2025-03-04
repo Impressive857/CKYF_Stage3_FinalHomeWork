@@ -36,6 +36,9 @@ namespace algorithm {
     int manhattan_distance(int x1, int y1, int x2, int y2) {
         return std::abs(x1 - x2) + std::abs(y1 - y2);
     }
+    double euclidean_distance(int x1, int y1, int x2, int y2) {
+        return std::sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2));
+    }
     using Path = std::vector<std::pair<int, int>>;
     Path a_star(const info_interfaces::msg::Map::SharedPtr map, int src_x, int src_y, int dst_x, int dst_y) {
         std::priority_queue<Node*, std::vector<Node*>, compare_node> to_visit;

@@ -22,6 +22,16 @@ namespace navigation {
     public:
         explicit Node(const std::string& name);
     private:
+        enum class Status {
+            NONE = 0,
+            FIND_ENEMY = 1,
+            GET_RECOVER = 2,
+            ENTER_GATE = 3,
+            SEND_PASSWORD = 4,
+            EXIT_GATE = 5,
+            FIND_BASE = 6
+        };
+    private:
         void grid_map_init_cbfn(const info_interfaces::msg::Map::SharedPtr map_info);
         void real_map_init_cbfn(const info_interfaces::msg::Map::SharedPtr map_info);
         void grid_area_init_cbfn(const info_interfaces::msg::Area::SharedPtr area_info);
@@ -30,6 +40,8 @@ namespace navigation {
         void password_segment_cbfn(const example_interfaces::msg::Int64::SharedPtr password_segment);
         void password_got_cbfn(const my_serial::password_receive_t& password_receive);
         void restart_cbfn(const example_interfaces::msg::Bool::SharedPtr restart_info);
+        bool can_attack(const info_interfaces::msg::Map::SharedPtr map_info, int src_x, int src_y, int dst_x, int dst_y);
+        void print_status() const;
     private:
         rclcpp::Publisher<geometry_msgs::msg::Pose2D>::SharedPtr m_our_pose_publisher;
         rclcpp::Publisher<example_interfaces::msg::Bool>::SharedPtr m_shoot_publisher;
@@ -63,6 +75,8 @@ namespace navigation {
         uint32_t m_last_real_y;
         my_serial::MySerial m_serial;
         my_serial::password_receive_t m_password_receive;
+        Status m_current_status;
+        Status m_last_status;
         const int m_dir[4][2]{ {-1,-1},{1,-1},{1,1},{-1,1} };
     };
 }

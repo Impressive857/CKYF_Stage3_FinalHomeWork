@@ -121,94 +121,60 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         m_real_map_publisher->publish(real_map);
         RCLCPP_INFO(get_logger(), "map has been send!");
 
+        std::shared_ptr<info_interfaces::msg::Map> real_map_ptr = std::make_shared<info_interfaces::msg::Map>(real_map);
+
         // 获取紫色出入口
         // rgb(193,97,212)
         lower = cv::Scalar(190, 95, 210);
         upper = cv::Scalar(195, 100, 215);
-        std::tie(center_pos_vec, border_rect_vec) = get_area("purple", cv_raw_img->image, lower, upper, 0, 0, 100, 100);
-        if (center_pos_vec.size() < 2 || border_rect_vec.size() < 2) {
-            RCLCPP_INFO(get_logger(), "failed to get purple area!");
+        std::tie(center_pos_vec, border_rect_vec) = get_area("purple gate", cv_raw_img->image, lower, upper, constant::gate_min_width, constant::gate_min_height, constant::gate_max_width, constant::gate_max_height);
+        if (center_pos_vec.empty() || border_rect_vec.empty()) {
+            RCLCPP_INFO(get_logger(), "failed to get purple gate!");
             publish_restart_info();
             return;
         }
-        if (border_rect_vec[0].width > border_rect_vec[1].width) {
-            if (!algorithm::can_connect(std::make_shared<info_interfaces::msg::Map>(real_map), center_pos_vec[0].x, center_pos_vec[0].y, real_area.password_pos.x, real_area.password_pos.y)) {
-                real_area.enter_gate_pos.x = center_pos_vec[0].x;
-                real_area.enter_gate_pos.y = center_pos_vec[0].y;
+        if (!algorithm::can_connect(real_map_ptr, center_pos_vec[0].x, center_pos_vec[0].y, real_area.password_pos.x, real_area.password_pos.y)) {
+            real_area.enter_gate_pos.x = center_pos_vec[0].x;
+            real_area.enter_gate_pos.y = center_pos_vec[0].y;
 
-                grid_area.enter_gate_pos.x = center_pos_vec[0].x / grid_width;
-                grid_area.enter_gate_pos.y = center_pos_vec[0].y / grid_height;
-            }
-            else {
-                real_area.exit_gate_pos.x = center_pos_vec[0].x;
-                real_area.exit_gate_pos.y = center_pos_vec[0].y;
-
-                grid_area.exit_gate_pos.x = center_pos_vec[0].x / grid_width;
-                grid_area.exit_gate_pos.y = center_pos_vec[0].y / grid_height;
-            }
+            grid_area.enter_gate_pos.x = center_pos_vec[0].x / grid_width;
+            grid_area.enter_gate_pos.y = center_pos_vec[0].y / grid_height;
         }
         else {
-            if (!algorithm::can_connect(std::make_shared<info_interfaces::msg::Map>(real_map), center_pos_vec[1].x, center_pos_vec[1].y, real_area.password_pos.x, real_area.password_pos.y)) {
-                real_area.enter_gate_pos.x = center_pos_vec[1].x;
-                real_area.enter_gate_pos.y = center_pos_vec[1].y;
+            real_area.exit_gate_pos.x = center_pos_vec[0].x;
+            real_area.exit_gate_pos.y = center_pos_vec[0].y;
 
-                grid_area.enter_gate_pos.x = center_pos_vec[1].x / grid_width;
-                grid_area.enter_gate_pos.y = center_pos_vec[1].y / grid_height;
-            }
-            else {
-                real_area.exit_gate_pos.x = center_pos_vec[1].x;
-                real_area.exit_gate_pos.y = center_pos_vec[1].y;
-
-                grid_area.exit_gate_pos.x = center_pos_vec[1].x / grid_width;
-                grid_area.exit_gate_pos.y = center_pos_vec[1].y / grid_height;
-            }
+            grid_area.exit_gate_pos.x = center_pos_vec[0].x / grid_width;
+            grid_area.exit_gate_pos.y = center_pos_vec[0].y / grid_height;
         }
 
         // 获取绿色出入口
         // rgb(29,198,113)
         lower = cv::Scalar(25, 195, 110);
         upper = cv::Scalar(30, 200, 115);
-        std::tie(center_pos_vec, border_rect_vec) = get_area("green", cv_raw_img->image, lower, upper, 0, 0, 100, 100);
-        if (center_pos_vec.size() < 2 || border_rect_vec.size() < 2) {
-            RCLCPP_INFO(get_logger(), "failed to get green area!");
+        std::tie(center_pos_vec, border_rect_vec) = get_area("green gate", cv_raw_img->image, lower, upper, constant::gate_min_width, constant::gate_min_height, constant::gate_max_width, constant::gate_max_height);
+        if (center_pos_vec.empty() || border_rect_vec.empty()) {
+            RCLCPP_INFO(get_logger(), "failed to get green gate!");
             publish_restart_info();
             return;
         }
-        if (border_rect_vec[0].width > border_rect_vec[1].width) {
-            if (!algorithm::can_connect(std::make_shared<info_interfaces::msg::Map>(real_map), center_pos_vec[0].x, center_pos_vec[0].y, real_area.password_pos.x, real_area.password_pos.y)) {
-                real_area.enter_gate_pos.x = center_pos_vec[0].x;
-                real_area.enter_gate_pos.y = center_pos_vec[0].y;
+        if (!algorithm::can_connect(real_map_ptr, center_pos_vec[0].x, center_pos_vec[0].y, real_area.password_pos.x, real_area.password_pos.y)) {
+            real_area.enter_gate_pos.x = center_pos_vec[0].x;
+            real_area.enter_gate_pos.y = center_pos_vec[0].y;
 
-                grid_area.enter_gate_pos.x = center_pos_vec[0].x / grid_width;
-                grid_area.enter_gate_pos.y = center_pos_vec[0].y / grid_height;
-            }
-            else {
-                real_area.exit_gate_pos.x = center_pos_vec[0].x;
-                real_area.exit_gate_pos.y = center_pos_vec[0].y;
-
-                grid_area.exit_gate_pos.x = center_pos_vec[0].x / grid_width;
-                grid_area.exit_gate_pos.y = center_pos_vec[0].y / grid_height;
-            }
+            grid_area.enter_gate_pos.x = center_pos_vec[0].x / grid_width;
+            grid_area.enter_gate_pos.y = center_pos_vec[0].y / grid_height;
         }
         else {
-            if (!algorithm::can_connect(std::make_shared<info_interfaces::msg::Map>(real_map), center_pos_vec[1].x, center_pos_vec[1].y, real_area.password_pos.x, real_area.password_pos.y)) {
-                real_area.enter_gate_pos.x = center_pos_vec[1].x;
-                real_area.enter_gate_pos.y = center_pos_vec[1].y;
+            real_area.exit_gate_pos.x = center_pos_vec[0].x;
+            real_area.exit_gate_pos.y = center_pos_vec[0].y;
 
-                grid_area.enter_gate_pos.x = center_pos_vec[1].x / grid_width;
-                grid_area.enter_gate_pos.y = center_pos_vec[1].y / grid_height;
-            }
-            else {
-                real_area.exit_gate_pos.x = center_pos_vec[1].x;
-                real_area.exit_gate_pos.y = center_pos_vec[1].y;
-
-                grid_area.exit_gate_pos.x = center_pos_vec[1].x / grid_width;
-                grid_area.exit_gate_pos.y = center_pos_vec[1].y / grid_height;
-            }
+            grid_area.exit_gate_pos.x = center_pos_vec[0].x / grid_width;
+            grid_area.exit_gate_pos.y = center_pos_vec[0].y / grid_height;
         }
-        if constexpr(debug_option::print_area_info){
-            RCLCPP_INFO(get_logger(), "enter gate real x:%d y:%d", real_area.enter_gate_pos.x, real_area.enter_gate_pos.y);
-            RCLCPP_INFO(get_logger(), "exit gate real x:%d y:%d", real_area.exit_gate_pos.x, real_area.exit_gate_pos.y);
+        if constexpr (debug_option::print_area_info) {
+            RCLCPP_INFO(get_logger(), "enter gate x:%d y:%d", real_area.enter_gate_pos.x, real_area.enter_gate_pos.y);
+            RCLCPP_INFO(get_logger(), "exit gate x:%d y:%d", real_area.exit_gate_pos.x, real_area.exit_gate_pos.y);
         }
 
         m_real_area_publisher->publish(real_area);
