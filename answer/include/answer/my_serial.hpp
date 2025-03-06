@@ -43,6 +43,7 @@ namespace my_serial {
             setGetId([](const Head& head)->int {return head.cmd_id;});
             setGetLength([](const Head& head)->int {return static_cast<int>(head.length);});
         }
+        
         template<typename _Ty>
         bool write(const _Ty& data) {
             return sp::serialPro<Head, Tail>::write({ FRAME_HEAD,sizeof(data),CMD_WRITE }, data);

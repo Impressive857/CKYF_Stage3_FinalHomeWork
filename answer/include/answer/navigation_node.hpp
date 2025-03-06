@@ -40,7 +40,31 @@ namespace navigation {
         void password_segment_cbfn(const example_interfaces::msg::Int64::SharedPtr password_segment);
         void password_got_cbfn(const my_serial::password_receive_t& password_receive);
         void restart_cbfn(const example_interfaces::msg::Bool::SharedPtr restart_info);
-        bool can_attack(const info_interfaces::msg::Map::SharedPtr map_info, int src_x, int src_y, int dst_x, int dst_y);
+        /// @brief 判断能否攻击
+        /// @param src_real src实际地图坐标
+        /// @param dst_real dst实际地图坐标
+        /// @return 能否攻击
+        bool can_attack(const info_interfaces::msg::Point src_real, const info_interfaces::msg::Point dst_real);
+        /// @brief 判断是否在附近
+        /// @param src_real src实际地图坐标
+        /// @param dst_real dst实际地图坐标
+        /// @param distance 视为在附近的距离
+        /// @return 是否在附近
+        bool is_around(const info_interfaces::msg::Point src_real, const info_interfaces::msg::Point dst_real, double distance = constant::near_distance);
+        /// @brief 获取src到dst导航所需pose
+        /// @param src_grid src网格地图坐标
+        /// @param dst_grid dst网格地图坐标
+        /// @return 导航所需pose
+        /// @warning 朝向角度是根据网格地图坐标计算出的，精度较低，不适合瞄准，要求瞄准精度清使用指定朝向的重载版本
+        geometry_msgs::msg::Pose2D get_pose(const info_interfaces::msg::Point src_grid, const info_interfaces::msg::Point dst_grid);
+        /// @brief 获取src到dst导航所需pose，且可以指定朝向
+        /// @param src_grid src网格地图坐标
+        /// @param dst_grid dst网格地图坐标
+        /// @param src_real src实际地图坐标
+        /// @param toward_real 朝向目标实际地图坐标
+        /// @return 导航所需pose
+        geometry_msgs::msg::Pose2D get_pose(const info_interfaces::msg::Point src_grid, const info_interfaces::msg::Point dst_grid, const info_interfaces::msg::Point src_real, const info_interfaces::msg::Point toward_real);
+        /// @brief 打印当前状态
         void print_status() const;
     private:
         rclcpp::Publisher<geometry_msgs::msg::Pose2D>::SharedPtr m_our_pose_publisher;
@@ -59,7 +83,7 @@ namespace navigation {
         info_interfaces::msg::Map::SharedPtr m_real_map;
         example_interfaces::msg::Int64 m_password;
         std::vector<example_interfaces::msg::Int64> m_password_segment_vec;
-        int m_count;
+        int m_count; // 防止卡死时，记录方向的计数器
         int m_bullet_num;
         bool m_should_stop;
         bool m_need_recover;

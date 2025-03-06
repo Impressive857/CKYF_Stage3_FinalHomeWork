@@ -63,6 +63,7 @@ void navigation::Node::real_area_init_cbfn(const info_interfaces::msg::Area::Sha
 
 void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::SharedPtr robot_info)
 {
+    // 确保map有效
     if (!this->m_grid_map.use_count()) return;
     if (!this->m_real_map.use_count()) return;
 
@@ -75,12 +76,16 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
 
     geometry_msgs::msg::Pose2D pose;
     example_interfaces::msg::Bool shoot;
+    shoot.data = true;
     algorithm::Path path;
+    m_should_stop = false;
 
     // 防止卡死在一个位置
     if (robot_info->our_robot_real_pos.x == m_last_real_x && robot_info->our_robot_real_pos.y == m_last_real_y && !m_should_stop) {
         pose.x = m_dir[m_count][0];
         pose.y = m_dir[m_count][1];
+        pose.x *= constant::speed_scale;
+        pose.y *= constant::speed_scale;
         if (!robot_info->enemy_real_pos_vec.empty()) {
             int32_t dy = static_cast<int32_t>(robot_info->enemy_real_pos_vec[0].y) - static_cast<int32_t>(robot_info->our_robot_real_pos.y);
             int32_t dx = static_cast<int32_t>(robot_info->enemy_real_pos_vec[0].x) - static_cast<int32_t>(robot_info->our_robot_real_pos.x);
@@ -89,36 +94,27 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
         m_count++;
         m_count %= 4;
     }
+    // 如果机器人状态不佳且有敌方机器人存在，则前去补给
     else if ((robot_info->our_robot_hp < constant::danger_hp || m_need_recover || m_bullet_num < constant::danger_bullet_num) && m_password_segment_vec.size() < 2) {
         m_current_status = Status::GET_RECOVER;
-        m_need_recover = true;
-        if (robot_info->our_robot_hp >= 1.0) {
-            m_need_recover = false;
-            return;
-        }
+
+        m_need_recover = robot_info->our_robot_hp >= constant::safe_hp;
 
         if (!robot_info->enemy_grid_pos_vec.empty()) {
-            int32_t dy = static_cast<int32_t>(robot_info->enemy_real_pos_vec[0].y) - static_cast<int32_t>(robot_info->our_robot_real_pos.y);
-            int32_t dx = static_cast<int32_t>(robot_info->enemy_real_pos_vec[0].x) - static_cast<int32_t>(robot_info->our_robot_real_pos.x);
-            pose.theta = std::atan2(dy, dx);
+            pose = get_pose(robot_info->our_robot_grid_pos, m_grid_area->recover_pos, robot_info->our_robot_real_pos, robot_info->enemy_real_pos_vec[0]);
 
-            if (can_attack(m_real_map, robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, robot_info->enemy_real_pos_vec[0].x, robot_info->enemy_real_pos_vec[0].y))
+            if (can_attack(robot_info->our_robot_real_pos, robot_info->enemy_real_pos_vec[0]))
             {
-                shoot.data = true;
                 m_shoot_publisher->publish(shoot);
             }
         }
-
-        path = algorithm::a_star(
-            this->m_grid_map,
-            robot_info->our_robot_grid_pos.x,
-            robot_info->our_robot_grid_pos.y,
-            m_grid_area->recover_pos.x,
-            m_grid_area->recover_pos.y
-        );
+        else {
+            pose = get_pose(robot_info->our_robot_grid_pos, m_grid_area->recover_pos);
+        }
 
         m_last_hp = robot_info->our_robot_hp;
     }
+    // 如果两段密码片段已经接收且密码片段未发送，则发送密码片段
     else if (m_password_segment_vec.size() >= 2 && !m_password_segment_has_sent) {
         my_serial::password_send_t password_send;
         password_send.password1 = m_password_segment_vec[0].data;
@@ -127,138 +123,75 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
         m_password_segment_has_sent = true;
         RCLCPP_INFO(get_logger(), "password segment has sent!");
     }
+    // 如果密码片段已经发送且密码已经接收到，则准备进攻基地
     else if (m_password_segment_has_sent && m_password_has_got) {
-        // 机器人和密码发射区无法直线到达，说明未进入密码发射区
+        // 机器人和密码发射区无法直线到达，说明未进入密码发射区，前往入口
         if (!algorithm::can_connect(m_real_map, robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, m_real_area->password_pos.x, m_real_area->password_pos.y) && !m_password_has_sent) {
             m_current_status = Status::ENTER_GATE;
 
-            int32_t dy = static_cast<int32_t>(m_real_area->enter_gate_pos.y) - static_cast<int32_t>(robot_info->our_robot_real_pos.y);
-            int32_t dx = static_cast<int32_t>(m_real_area->enter_gate_pos.x) - static_cast<int32_t>(robot_info->our_robot_real_pos.x);
-            pose.theta = std::atan2(dy, dx);
+            m_should_stop = is_around(robot_info->our_robot_real_pos, m_real_area->enter_gate_pos);
 
-            if (algorithm::euclidean_distance(robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, m_real_area->enter_gate_pos.x, m_real_area->enter_gate_pos.y) < constant::stop_distance) {
-                m_should_stop = true;
-                pose.x = 0;
-                pose.y = 0;
-                m_our_pose_publisher->publish(pose);
-                return;
-            }
-            else {
-                m_should_stop = false;
-                path = algorithm::a_star(
-                    this->m_grid_map,
-                    robot_info->our_robot_grid_pos.x,
-                    robot_info->our_robot_grid_pos.y,
-                    m_grid_area->enter_gate_pos.x,
-                    m_grid_area->enter_gate_pos.y
-                );
-            }
+            pose = get_pose(robot_info->our_robot_grid_pos, m_grid_area->enter_gate_pos);
         }
+        // 进入密码发射区，未发送密码则发送密码
         else if (!m_password_has_sent) {
             m_current_status = Status::SEND_PASSWORD;
 
-            int32_t dy = static_cast<int32_t>(m_real_area->password_pos.y) - static_cast<int32_t>(robot_info->our_robot_real_pos.y);
-            int32_t dx = static_cast<int32_t>(m_real_area->password_pos.x) - static_cast<int32_t>(robot_info->our_robot_real_pos.x);
-            pose.theta = std::atan2(dy, dx);
+            m_should_stop = is_around(robot_info->our_robot_real_pos, m_real_area->password_pos, constant::send_password_distance);
 
-            path = algorithm::a_star(
-                this->m_grid_map,
-                robot_info->our_robot_grid_pos.x,
-                robot_info->our_robot_grid_pos.y,
-                m_grid_area->password_pos.x,
-                m_grid_area->password_pos.y
-            );
+            pose = get_pose(robot_info->our_robot_grid_pos, m_grid_area->password_pos);
 
-            if (algorithm::euclidean_distance(robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, m_real_area->password_pos.x, m_real_area->password_pos.y) < constant::stop_distance) {
+            if (m_should_stop) {
                 m_password_publisher->publish(m_password);
                 RCLCPP_INFO(get_logger(), "password has send!");
                 m_password_has_sent = true;
             }
         }
+        // 密码已经发送且机器人能和出口直线到达，说明未离开密码发射区，前往出口
         else if (m_password_has_sent && algorithm::can_connect(m_real_map, robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, m_real_area->exit_gate_pos.x, m_real_area->exit_gate_pos.y)) {
             m_current_status = Status::EXIT_GATE;
 
-            int32_t dy = static_cast<int32_t>(m_real_area->exit_gate_pos.y) - static_cast<int32_t>(robot_info->our_robot_real_pos.y);
-            int32_t dx = static_cast<int32_t>(m_real_area->exit_gate_pos.x) - static_cast<int32_t>(robot_info->our_robot_real_pos.x);
-            pose.theta = std::atan2(dy, dx);
+            m_should_stop = is_around(robot_info->our_robot_real_pos, m_real_area->exit_gate_pos);
 
-            if (algorithm::euclidean_distance(robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, m_real_area->exit_gate_pos.x, m_real_area->exit_gate_pos.y) < constant::stop_distance) {
-                m_should_stop = true;
-                pose.x = 0;
-                pose.y = 0;
-                m_our_pose_publisher->publish(pose);
-                return;
-            }
-            else {
-                m_should_stop = false;
-                path = algorithm::a_star(
-                    this->m_grid_map,
-                    robot_info->our_robot_grid_pos.x,
-                    robot_info->our_robot_grid_pos.y,
-                    m_grid_area->exit_gate_pos.x,
-                    m_grid_area->exit_gate_pos.y
-                );
-            }
+            pose = get_pose(robot_info->our_robot_grid_pos, m_grid_area->exit_gate_pos);
         }
+        // 密码已经发送且机器人离开密码发射区，则前往基地
         else {
             m_current_status = Status::FIND_BASE;
 
-            int32_t dy = static_cast<int32_t>(m_real_area->base_pos.y) - static_cast<int32_t>(robot_info->our_robot_real_pos.y);
-            int32_t dx = static_cast<int32_t>(m_real_area->base_pos.x) - static_cast<int32_t>(robot_info->our_robot_real_pos.x);
-            pose.theta = std::atan2(dy, dx);
+            m_should_stop = is_around(robot_info->our_robot_real_pos, m_real_area->base_pos, constant::attack_base_distance);
 
-            path = algorithm::a_star(
-                this->m_grid_map,
-                robot_info->our_robot_grid_pos.x,
-                robot_info->our_robot_grid_pos.y,
-                m_grid_area->base_pos.x,
-                m_grid_area->base_pos.y
-            );
+            pose = get_pose(robot_info->our_robot_grid_pos, m_grid_area->base_pos, robot_info->our_robot_real_pos, m_real_area->base_pos);
 
-            if (can_attack(m_real_map, robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, m_real_area->base_pos.x, m_real_area->base_pos.y))
+            if (can_attack(robot_info->our_robot_real_pos, m_real_area->base_pos))
             {
-                shoot.data = true;
                 m_shoot_publisher->publish(shoot);
             }
         }
     }
+    // 如果还有敌人，则攻击敌人
     else if (!robot_info->enemy_grid_pos_vec.empty())
     {
         m_current_status = Status::FIND_ENEMY;
 
-        int32_t dy = static_cast<int32_t>(robot_info->enemy_real_pos_vec[0].y) - static_cast<int32_t>(robot_info->our_robot_real_pos.y);
-        int32_t dx = static_cast<int32_t>(robot_info->enemy_real_pos_vec[0].x) - static_cast<int32_t>(robot_info->our_robot_real_pos.x);
-        pose.theta = std::atan2(dy, dx);
+        pose = get_pose(robot_info->our_robot_grid_pos, robot_info->enemy_grid_pos_vec[0], robot_info->our_robot_real_pos, robot_info->enemy_real_pos_vec[0]);
 
-        path = algorithm::a_star(
-            this->m_grid_map,
-            robot_info->our_robot_grid_pos.x,
-            robot_info->our_robot_grid_pos.y,
-            robot_info->enemy_grid_pos_vec[0].x,
-            robot_info->enemy_grid_pos_vec[0].y
-        );
-
-        if (can_attack(m_real_map, robot_info->our_robot_real_pos.x, robot_info->our_robot_real_pos.y, robot_info->enemy_real_pos_vec[0].x, robot_info->enemy_real_pos_vec[0].y))
+        if (can_attack(robot_info->our_robot_real_pos, robot_info->enemy_real_pos_vec[0]))
         {
-            shoot.data = true;
             m_shoot_publisher->publish(shoot);
         }
     }
-    if (path.size() >= 2) {
-        std::tie(pose.x, pose.y) = path[1];
-        pose.x -= robot_info->our_robot_grid_pos.x;
-        pose.y -= robot_info->our_robot_grid_pos.y;
-        pose.x *= constant::speed_scale;
-        pose.y *= constant::speed_scale;
-        if constexpr (debug_option::print_our_pose) {
-            RCLCPP_INFO(get_logger(), "posex:%lf, posey:%lf theta:%lf", pose.x, pose.y, pose.theta);
-        }
-        m_our_pose_publisher->publish(pose);
-    }
+
+    m_our_pose_publisher->publish(pose);
+
+    // 如果状态改变则打印
     if (m_current_status != m_last_status) {
         print_status();
-        m_last_status = m_current_status;
     }
+
+    // 更新状态
+    m_last_status = m_current_status;
+
     // 更新位置
     m_last_real_x = robot_info->our_robot_real_pos.x;
     m_last_real_y = robot_info->our_robot_real_pos.y;
@@ -300,20 +233,86 @@ void navigation::Node::restart_cbfn(const example_interfaces::msg::Bool::SharedP
     }
 }
 
-bool navigation::Node::can_attack(const info_interfaces::msg::Map::SharedPtr map_info, int src_x, int src_y, int dst_x, int dst_y)
+bool navigation::Node::can_attack(const info_interfaces::msg::Point src_real, const info_interfaces::msg::Point dst_real)
 {
     return (
-        algorithm::can_connect(map_info, src_x, src_y, dst_x, dst_y)
+        algorithm::can_connect(m_real_map, src_real.x, src_real.y, dst_real.x, dst_real.y)
         &&
-        algorithm::euclidean_distance(src_x, src_y, dst_x, dst_y) < constant::attack_distance
+        algorithm::euclidean_distance(src_real.x, src_real.y, dst_real.x, dst_real.y) < static_cast<double>(constant::attack_distance)
         &&
         m_bullet_num > 0
         );
 }
 
+bool navigation::Node::is_around(const info_interfaces::msg::Point src_real, const info_interfaces::msg::Point dst_real, double distance)
+{
+    return algorithm::euclidean_distance(src_real.x, src_real.y, dst_real.x, dst_real.y) < distance;
+}
+
+geometry_msgs::msg::Pose2D navigation::Node::get_pose(const info_interfaces::msg::Point src_grid, const info_interfaces::msg::Point dst_grid) {
+    geometry_msgs::msg::Pose2D pose;
+    algorithm::Path path;
+
+    int32_t dy = static_cast<int32_t>(dst_grid.y) - static_cast<int32_t>(src_grid.y);
+    int32_t dx = static_cast<int32_t>(dst_grid.x) - static_cast<int32_t>(src_grid.x);
+    pose.theta = std::atan2(dy, dx);
+
+    if (!m_should_stop) {
+        path = algorithm::a_star(m_grid_map, src_grid.x, src_grid.y, dst_grid.x, dst_grid.y);
+
+        if (path.size() >= 2) {
+            std::tie(pose.x, pose.y) = path[1];
+            pose.x -= src_grid.x;
+            pose.y -= src_grid.y;
+            pose.x *= constant::speed_scale;
+            pose.y *= constant::speed_scale;
+        }
+    }
+    else {
+        pose.x = 0;
+        pose.y = 0;
+    }
+
+    if constexpr (debug_option::print_our_pose) {
+        RCLCPP_INFO(get_logger(), "posex:%lf, posey:%lf theta:%lf", pose.x, pose.y, pose.theta);
+    }
+
+    return pose;
+}
+
+geometry_msgs::msg::Pose2D navigation::Node::get_pose(const info_interfaces::msg::Point src_grid, const info_interfaces::msg::Point dst_grid, const info_interfaces::msg::Point src_real, const info_interfaces::msg::Point toward_real) {
+    geometry_msgs::msg::Pose2D pose;
+    algorithm::Path path;
+
+    int32_t dy = static_cast<int32_t>(toward_real.y) - static_cast<int32_t>(src_real.y);
+    int32_t dx = static_cast<int32_t>(toward_real.x) - static_cast<int32_t>(src_real.x);
+    pose.theta = std::atan2(dy, dx);
+
+    if (!m_should_stop) {
+        path = algorithm::a_star(m_grid_map, src_grid.x, src_grid.y, dst_grid.x, dst_grid.y);
+
+        if (path.size() >= 2) {
+            std::tie(pose.x, pose.y) = path[1];
+            pose.x -= src_grid.x;
+            pose.y -= src_grid.y;
+            pose.x *= constant::speed_scale;
+            pose.y *= constant::speed_scale;
+        }
+    }
+
+    if constexpr (debug_option::print_our_pose) {
+        RCLCPP_INFO(get_logger(), "posex:%lf, posey:%lf theta:%lf", pose.x, pose.y, pose.theta);
+    }
+
+    return pose;
+}
+
 void navigation::Node::print_status() const
 {
     switch (m_current_status) {
+    case Status::NONE: {
+        break;
+    }
     case Status::FIND_ENEMY: {
         RCLCPP_INFO(get_logger(), "finding enemy!");
         break;

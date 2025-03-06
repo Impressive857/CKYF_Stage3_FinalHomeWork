@@ -12,7 +12,7 @@ img2map::Node::Node(const std::string& name)
     m_real_area_publisher = this->create_publisher<info_interfaces::msg::Area>(topic_name::real_area, 1);
     m_robot_publisher = this->create_publisher<info_interfaces::msg::Robot>(topic_name::robot, 1);
     m_restart_publisher = this->create_publisher<example_interfaces::msg::Bool>(topic_name::restart, 1);
-    m_img_subscription = this->create_subscription<sensor_msgs::msg::Image>("image_raw", 10, std::bind(&img2map::Node::img2map_cbfn, this, std::placeholders::_1));
+    m_img_subscription = this->create_subscription<sensor_msgs::msg::Image>(topic_name::image_raw, 10, std::bind(&img2map::Node::img2map_cbfn, this, std::placeholders::_1));
 }
 
 void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_raw_img)
@@ -20,8 +20,6 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
     cv_bridge::CvImagePtr cv_raw_img = cv_bridge::toCvCopy(ros_raw_img, ros_raw_img->encoding);
     std::vector<cv::Point> center_pos_vec; // 存储区域中心坐标
     std::vector<cv::Rect> border_rect_vec; // 存储区域边界矩形
-    cv::Scalar lower; // 颜色下限
-    cv::Scalar upper; // 颜色上限
     const int grid_width = cv_raw_img->image.cols / constant::grid_num_v; // 网格宽度
     const int grid_height = cv_raw_img->image.rows / constant::grid_num_h; // 网格高度
     if (!m_initialized) {
@@ -32,10 +30,7 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         info_interfaces::msg::Area real_area;
 
         // 获取密码发射区
-        // rgb(94,101,255)
-        lower = cv::Scalar(90, 95, 250);
-        upper = cv::Scalar(100, 105, 255);
-        std::tie(center_pos_vec, border_rect_vec) = get_area("password", cv_raw_img->image, lower, upper, 20, 20, 100, 100);
+        std::tie(center_pos_vec, border_rect_vec) = get_area("password", cv_raw_img->image, area_color::password_lower, area_color::password_upper, constant::password_min_width, constant::password_min_height, constant::password_max_width, constant::password_max_height);
         if (center_pos_vec.empty() || border_rect_vec.empty()) {
             RCLCPP_INFO(get_logger(), "failed to get password area!");
             publish_restart_info();
@@ -48,10 +43,7 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         grid_area.password_pos.y = center_pos_vec[0].y / grid_height;
 
         // 获取补给区
-        // rgb(60,85,107)
-        lower = cv::Scalar(55, 80, 100);
-        upper = cv::Scalar(65, 90, 115);
-        std::tie(center_pos_vec, border_rect_vec) = get_area("recover", cv_raw_img->image, lower, upper, 20, 20, 100, 100);
+        std::tie(center_pos_vec, border_rect_vec) = get_area("recover", cv_raw_img->image, area_color::recover_lower, area_color::recover_upper, constant::recover_min_width, constant::recover_min_height, constant::recover_max_width, constant::recover_max_height);
         if (center_pos_vec.empty() || border_rect_vec.empty()) {
             RCLCPP_INFO(get_logger(), "failed to get recover area!");
             publish_restart_info();
@@ -64,10 +56,7 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         grid_area.recover_pos.y = center_pos_vec[0].y / grid_height;
 
         // 获取基地
-        // rgb(170,120,151)
-        lower = cv::Scalar(165, 115, 145);
-        upper = cv::Scalar(175, 125, 155);
-        std::tie(center_pos_vec, border_rect_vec) = get_area("base", cv_raw_img->image, lower, upper, 10, 10, 100, 100);
+        std::tie(center_pos_vec, border_rect_vec) = get_area("base", cv_raw_img->image, area_color::base_lower, area_color::base_upper, constant::base_min_width, constant::base_min_height, constant::base_max_width, constant::base_max_height);
         if (center_pos_vec.empty() || border_rect_vec.empty()) {
             RCLCPP_INFO(get_logger(), "failed to get base area!");
             publish_restart_info();
@@ -81,12 +70,9 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
 
         // 开始获取map
         cv::Mat binary; // 存储二值化图片
-        // rgb(58,58,58)
-        lower = cv::Scalar(55, 55, 55);
-        upper = cv::Scalar(60, 60, 60);
 
         // 获取迷宫
-        cv::inRange(cv_raw_img->image, lower, upper, binary);
+        cv::inRange(cv_raw_img->image, area_color::map_lower, area_color::map_upper, binary);
 
         // 对图像进行去噪操作
         cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5));
@@ -124,10 +110,7 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         std::shared_ptr<info_interfaces::msg::Map> real_map_ptr = std::make_shared<info_interfaces::msg::Map>(real_map);
 
         // 获取紫色出入口
-        // rgb(193,97,212)
-        lower = cv::Scalar(190, 95, 210);
-        upper = cv::Scalar(195, 100, 215);
-        std::tie(center_pos_vec, border_rect_vec) = get_area("purple gate", cv_raw_img->image, lower, upper, constant::gate_min_width, constant::gate_min_height, constant::gate_max_width, constant::gate_max_height);
+        std::tie(center_pos_vec, border_rect_vec) = get_area("purple gate", cv_raw_img->image, area_color::purple_lower, area_color::purple_upper, constant::gate_min_width, constant::gate_min_height, constant::gate_max_width, constant::gate_max_height);
         if (center_pos_vec.empty() || border_rect_vec.empty()) {
             RCLCPP_INFO(get_logger(), "failed to get purple gate!");
             publish_restart_info();
@@ -149,10 +132,7 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         }
 
         // 获取绿色出入口
-        // rgb(29,198,113)
-        lower = cv::Scalar(25, 195, 110);
-        upper = cv::Scalar(30, 200, 115);
-        std::tie(center_pos_vec, border_rect_vec) = get_area("green gate", cv_raw_img->image, lower, upper, constant::gate_min_width, constant::gate_min_height, constant::gate_max_width, constant::gate_max_height);
+        std::tie(center_pos_vec, border_rect_vec) = get_area("green gate", cv_raw_img->image, area_color::green_lower, area_color::green_upper, constant::gate_min_width, constant::gate_min_height, constant::gate_max_width, constant::gate_max_height);
         if (center_pos_vec.empty() || border_rect_vec.empty()) {
             RCLCPP_INFO(get_logger(), "failed to get green gate!");
             publish_restart_info();
@@ -182,10 +162,7 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         RCLCPP_INFO(get_logger(), "area has been send!");
 
         // 获取生命值条长度
-        // rgb(131,131,131)
-        lower = cv::Scalar(125, 125, 125);
-        upper = cv::Scalar(137, 137, 137);
-        std::tie(center_pos_vec, border_rect_vec) = get_area("our robot hp", cv_raw_img->image, lower, upper, 0, 0, 1000, 1000);
+        std::tie(center_pos_vec, border_rect_vec) = get_area("our robot hp", cv_raw_img->image, area_color::hp_block_lower, area_color::hp_block_upper, constant::hp_min_width, constant::hp_min_height, constant::hp_max_width, constant::hp_max_height);
         if (center_pos_vec.empty() || border_rect_vec.empty()) {
             RCLCPP_INFO(get_logger(), "failed to get our robot hp!");
             publish_restart_info();
@@ -198,10 +175,7 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         info_interfaces::msg::Robot robot;
 
         // 获取己方机器人位置
-        // rgb(89,170,240)
-        lower = cv::Scalar(85, 165, 235);
-        upper = cv::Scalar(93, 175, 245);
-        std::tie(center_pos_vec, border_rect_vec) = get_robot("our robot", cv_raw_img->image, lower, upper, 0, 0, 100, 100);
+        std::tie(center_pos_vec, border_rect_vec) = get_robot("our robot", cv_raw_img->image, area_color::our_robot_lower, area_color::our_robot_upper, constant::our_robot_min_width, constant::our_robot_min_height, constant::our_robot_max_width, constant::our_robot_max_height);
         if (center_pos_vec.empty() || border_rect_vec.empty()) {
             RCLCPP_INFO(get_logger(), "failed to get our robot pos!");
             publish_restart_info();
@@ -217,12 +191,10 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         robot.our_robot_grid_pos.y = center_pos_vec[0].y / grid_height;
 
         // 获取己方机器人生命值
-        // rgb(131,131,131)
-        lower = cv::Scalar(125, 125, 125);
-        upper = cv::Scalar(137, 137, 137);
-        std::tie(center_pos_vec, border_rect_vec) = get_robot("our robot hp", cv_raw_img->image, lower, upper, 0, 0, 1000, 1000);
+        std::tie(center_pos_vec, border_rect_vec) = get_robot("our robot hp", cv_raw_img->image, area_color::hp_block_lower, area_color::hp_block_upper, constant::hp_min_width, constant::hp_min_height, constant::hp_max_width, constant::hp_max_height);
+        // m_hp_block_width不能为零，因为要计算生命值百分比
         if (center_pos_vec.empty() || border_rect_vec.empty() || 0 == m_hp_block_width) {
-            RCLCPP_INFO(get_logger(), "failed to get our robot current hp! width%d", m_hp_block_width);
+            RCLCPP_INFO(get_logger(), "failed to get our robot current hp!");
             m_initialized = false;
             publish_restart_info();
             return;
@@ -230,10 +202,7 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         robot.our_robot_hp = static_cast<double>(border_rect_vec[0].width) / static_cast<double>(m_hp_block_width);
 
         // 获取敌方机器人位置
-        // rgb(255,104,104)
-        lower = cv::Scalar(250, 100, 100);
-        upper = cv::Scalar(255, 108, 108);
-        std::tie(center_pos_vec, border_rect_vec) = get_robot("enemy robot", cv_raw_img->image, lower, upper, 0, 0, 50, 50);
+        std::tie(center_pos_vec, border_rect_vec) = get_robot("enemy robot", cv_raw_img->image, area_color::enemy_lower, area_color::enemy_upper, constant::enemy_min_width, constant::enemy_min_height, constant::enemy_max_width, constant::enemy_max_height);
         if (center_pos_vec.empty() || border_rect_vec.empty()) {
             RCLCPP_INFO(get_logger(), "failed to get enemy robot!");
             m_initialized = false;
@@ -242,7 +211,7 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         }
         for (size_t i = 0; i < center_pos_vec.size();i++) {
             info_interfaces::msg::Point enemy_pos;
-            if (center_pos_vec[i].x > 1900) continue;
+            if (center_pos_vec[i].x > constant::enemy_max_x) continue;
             // 获取敌人实际坐标
             enemy_pos.x = center_pos_vec[i].x;
             enemy_pos.y = center_pos_vec[i].y;
@@ -255,7 +224,9 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
         }
 
         // 将robot发送到寻路模块
-        // RCLCPP_INFO(get_logger(), "robot has been send!");
+        if constexpr (debug_option::print_robot_info) {
+            RCLCPP_INFO(get_logger(), "robot has been send!");
+        }
         m_robot_publisher->publish(robot);
     }
 }
