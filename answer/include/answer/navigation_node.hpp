@@ -51,6 +51,11 @@ namespace navigation {
         /// @param distance 视为在附近的距离
         /// @return 是否在附近
         bool is_around(const info_interfaces::msg::Point src_real, const info_interfaces::msg::Point dst_real, double distance = constant::near_distance);
+        /// @brief 获取朝向角度
+        /// @param src src坐标
+        /// @param toward 朝向目标坐标
+        /// @return 朝向角度
+        double get_theta(const info_interfaces::msg::Point src, const info_interfaces::msg::Point toward);
         /// @brief 获取src到dst导航所需pose
         /// @param src_grid src网格地图坐标
         /// @param dst_grid dst网格地图坐标
@@ -83,7 +88,8 @@ namespace navigation {
         info_interfaces::msg::Map::SharedPtr m_real_map;
         example_interfaces::msg::Int64 m_password;
         std::vector<example_interfaces::msg::Int64> m_password_segment_vec;
-        int m_count; // 防止卡死时，记录方向的计数器
+        int m_dir_count; // 防止卡死时，记录方向的计数器
+        int m_count; // 防止卡死时的计数器
         int m_bullet_num;
         bool m_should_stop;
         bool m_need_recover;

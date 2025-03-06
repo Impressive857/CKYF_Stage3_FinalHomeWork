@@ -4,6 +4,7 @@ navigation::Node::Node(const std::string& name)
     :rclcpp::Node(name), m_serial(constant::serial_path, constant::baud_rate)
 {
     m_count = 0;
+    m_dir_count = 0;
     m_last_real_x = 0;
     m_last_real_y = 0;
     m_bullet_num = 10;
@@ -81,15 +82,22 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
     m_should_stop = false;
 
     // 防止卡死在一个位置
-    if (robot_info->our_robot_real_pos.x == m_last_real_x && robot_info->our_robot_real_pos.y == m_last_real_y && !m_should_stop) {
-        pose.x = m_dir[m_count][0];
-        pose.y = m_dir[m_count][1];
+    // 为了防止短时间内的快速循环导致误判卡死
+    // 到达一定的循环次数才进行脱离卡死状态操作
+    if (robot_info->our_robot_real_pos.x == m_last_real_x && robot_info->our_robot_real_pos.y == m_last_real_y && !m_should_stop && ++m_count > 10) {
+        m_count = 0;
+
+        pose.x = m_dir[m_dir_count][0];
+        pose.y = m_dir[m_dir_count][1];
         pose.x *= constant::speed_scale;
         pose.y *= constant::speed_scale;
+        // 如果有敌人，防卡死时确保指向敌人
         if (!robot_info->enemy_real_pos_vec.empty()) {
-            int32_t dy = static_cast<int32_t>(robot_info->enemy_real_pos_vec[0].y) - static_cast<int32_t>(robot_info->our_robot_real_pos.y);
-            int32_t dx = static_cast<int32_t>(robot_info->enemy_real_pos_vec[0].x) - static_cast<int32_t>(robot_info->our_robot_real_pos.x);
-            pose.theta = std::atan2(dy, dx);
+            pose.theta = get_theta(robot_info->our_robot_real_pos, robot_info->enemy_real_pos_vec[0]);
+        }
+        // 如果没有敌人，防卡死时指向基地
+        else {
+            pose.theta = get_theta(robot_info->our_robot_real_pos, m_real_area->base_pos);
         }
         m_count++;
         m_count %= 4;
@@ -215,6 +223,7 @@ void navigation::Node::restart_cbfn(const example_interfaces::msg::Bool::SharedP
     if (true == restart_info->data) {
         m_password_segment_vec.clear();
         m_count = 0;
+        m_dir_count = 0;
         m_bullet_num = 10;
         m_should_stop = false;
         m_need_recover = false;
@@ -249,13 +258,18 @@ bool navigation::Node::is_around(const info_interfaces::msg::Point src_real, con
     return algorithm::euclidean_distance(src_real.x, src_real.y, dst_real.x, dst_real.y) < distance;
 }
 
+double navigation::Node::get_theta(const info_interfaces::msg::Point src, const info_interfaces::msg::Point toward)
+{
+    int32_t dy = static_cast<int32_t>(toward.y) - static_cast<int32_t>(src.y);
+    int32_t dx = static_cast<int32_t>(toward.x) - static_cast<int32_t>(src.x);
+    return std::atan2(dy, dx);
+}
+
 geometry_msgs::msg::Pose2D navigation::Node::get_pose(const info_interfaces::msg::Point src_grid, const info_interfaces::msg::Point dst_grid) {
     geometry_msgs::msg::Pose2D pose;
     algorithm::Path path;
 
-    int32_t dy = static_cast<int32_t>(dst_grid.y) - static_cast<int32_t>(src_grid.y);
-    int32_t dx = static_cast<int32_t>(dst_grid.x) - static_cast<int32_t>(src_grid.x);
-    pose.theta = std::atan2(dy, dx);
+    pose.theta = get_theta(src_grid, dst_grid);
 
     if (!m_should_stop) {
         path = algorithm::a_star(m_grid_map, src_grid.x, src_grid.y, dst_grid.x, dst_grid.y);
@@ -284,9 +298,7 @@ geometry_msgs::msg::Pose2D navigation::Node::get_pose(const info_interfaces::msg
     geometry_msgs::msg::Pose2D pose;
     algorithm::Path path;
 
-    int32_t dy = static_cast<int32_t>(toward_real.y) - static_cast<int32_t>(src_real.y);
-    int32_t dx = static_cast<int32_t>(toward_real.x) - static_cast<int32_t>(src_real.x);
-    pose.theta = std::atan2(dy, dx);
+    pose.theta = get_theta(src_real, toward_real);
 
     if (!m_should_stop) {
         path = algorithm::a_star(m_grid_map, src_grid.x, src_grid.y, dst_grid.x, dst_grid.y);
@@ -298,6 +310,10 @@ geometry_msgs::msg::Pose2D navigation::Node::get_pose(const info_interfaces::msg
             pose.x *= constant::speed_scale;
             pose.y *= constant::speed_scale;
         }
+    }
+    else {
+        pose.x = 0;
+        pose.y = 0;
     }
 
     if constexpr (debug_option::print_our_pose) {

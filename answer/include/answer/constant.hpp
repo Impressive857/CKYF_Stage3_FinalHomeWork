@@ -24,7 +24,7 @@ namespace constant {
     constexpr int grid_num_h = 128; // 垂直方向网格数量
     constexpr int attack_distance = 400; // 攻击距离,敌人在攻击距离内再攻击
     constexpr int near_distance = 25; // 低于这个距离就视为很近
-    constexpr int send_password_distance = 35; // 低于这个距离就视为到达密码发射区
+    constexpr int send_password_distance = 30; // 低于这个距离就视为到达密码发射区
     constexpr int attack_base_distance = 60; // 低于这个距离就认为到达基地
     constexpr double danger_hp = 0.9; // 生命值低于这个值就要补充
     constexpr double safe_hp = 1.0; // 生命值大于等于这个值就视为安全
