@@ -36,9 +36,11 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
             publish_restart_info();
             return;
         }
+        // 获取实际坐标
         real_area.password_pos.x = center_pos_vec[0].x;
         real_area.password_pos.y = center_pos_vec[0].y;
 
+        // 获取网格坐标
         grid_area.password_pos.x = center_pos_vec[0].x / grid_width;
         grid_area.password_pos.y = center_pos_vec[0].y / grid_height;
 
@@ -49,9 +51,11 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
             publish_restart_info();
             return;
         }
+        // 获取实际坐标
         real_area.recover_pos.x = center_pos_vec[0].x;
         real_area.recover_pos.y = center_pos_vec[0].y;
 
+        // 获取网格坐标
         grid_area.recover_pos.x = center_pos_vec[0].x / grid_width;
         grid_area.recover_pos.y = center_pos_vec[0].y / grid_height;
 
@@ -62,43 +66,48 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
             publish_restart_info();
             return;
         }
+        // 获取实际坐标
         real_area.base_pos.x = center_pos_vec[0].x;
         real_area.base_pos.y = center_pos_vec[0].y;
 
+        // 获取网格坐标
         grid_area.base_pos.x = center_pos_vec[0].x / grid_width;
         grid_area.base_pos.y = center_pos_vec[0].y / grid_height;
 
         // 开始获取map
-        cv::Mat binary; // 存储二值化图片
+        cv::Mat binary_map; // 存储二值化map
 
         // 获取迷宫
-        cv::inRange(cv_raw_img->image, area_color::map_lower, area_color::map_upper, binary);
-
-        // 对图像进行去噪操作
-        cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5));
-        cv::erode(binary, binary, kernel);
-        cv::dilate(binary, binary, kernel);
+        cv::inRange(cv_raw_img->image, area_color::map_lower, area_color::map_upper, binary_map);
 
         // 将处理后的图像处理为map
         // 处理后图像路径是黑色，边缘是白色
         // map.mat存储的是bool，黑色为0，白色为1
+
+        // 对图像进行去噪操作
+        cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5));
+        cv::erode(binary_map, binary_map, kernel);
+        cv::dilate(binary_map, binary_map, kernel);
+
+        // 获取网格地图
         info_interfaces::msg::Map grid_map;
         grid_map.row = constant::grid_num_h;
         grid_map.col = constant::grid_num_v;
         grid_map.mat.resize(constant::grid_num_h * constant::grid_num_v);
         for (int j = 0; j < constant::grid_num_h; j++) {
             for (int i = 0; i < constant::grid_num_v; i++) {
-                grid_map.mat[i + j * constant::grid_num_v] = binary.at<uchar>((j + 0.5) * grid_height, (i + 0.5) * grid_width);
+                grid_map.mat[i + j * constant::grid_num_v] = binary_map.at<uchar>((j + 0.5) * grid_height, (i + 0.5) * grid_width);
             }
         }
 
+        // 获取实际地图
         info_interfaces::msg::Map real_map;
-        real_map.row = cv_raw_img->image.rows;
-        real_map.col = cv_raw_img->image.cols;
+        real_map.row = binary_map.rows;
+        real_map.col = binary_map.cols;
         real_map.mat.resize(cv_raw_img->image.rows * cv_raw_img->image.cols);
         for (int j = 0; j < cv_raw_img->image.rows; j++) {
             for (int i = 0; i < cv_raw_img->image.cols; i++) {
-                real_map.mat[i + j * cv_raw_img->image.cols] = binary.at<uchar>(j, i);
+                real_map.mat[i + j * cv_raw_img->image.cols] = binary_map.at<uchar>(j, i);
             }
         }
 
@@ -116,17 +125,23 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
             publish_restart_info();
             return;
         }
+
+        // 如果不能直线到达密码发射区，肯定在中心区域外
         if (!algorithm::can_connect(real_map_ptr, center_pos_vec[0].x, center_pos_vec[0].y, real_area.password_pos.x, real_area.password_pos.y)) {
+            // 获取实际坐标
             real_area.enter_gate_pos.x = center_pos_vec[0].x;
             real_area.enter_gate_pos.y = center_pos_vec[0].y;
 
+            // 获取网格坐标
             grid_area.enter_gate_pos.x = center_pos_vec[0].x / grid_width;
             grid_area.enter_gate_pos.y = center_pos_vec[0].y / grid_height;
         }
         else {
+            // 获取实际坐标
             real_area.exit_gate_pos.x = center_pos_vec[0].x;
             real_area.exit_gate_pos.y = center_pos_vec[0].y;
 
+            // 获取网格坐标
             grid_area.exit_gate_pos.x = center_pos_vec[0].x / grid_width;
             grid_area.exit_gate_pos.y = center_pos_vec[0].y / grid_height;
         }
@@ -138,20 +153,27 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
             publish_restart_info();
             return;
         }
+
+        // 如果不能直线到达密码发射区，肯定在中心区域外
         if (!algorithm::can_connect(real_map_ptr, center_pos_vec[0].x, center_pos_vec[0].y, real_area.password_pos.x, real_area.password_pos.y)) {
+            // 获取实际坐标
             real_area.enter_gate_pos.x = center_pos_vec[0].x;
             real_area.enter_gate_pos.y = center_pos_vec[0].y;
 
+            // 获取网格坐标
             grid_area.enter_gate_pos.x = center_pos_vec[0].x / grid_width;
             grid_area.enter_gate_pos.y = center_pos_vec[0].y / grid_height;
         }
         else {
+            // 获取实际坐标
             real_area.exit_gate_pos.x = center_pos_vec[0].x;
             real_area.exit_gate_pos.y = center_pos_vec[0].y;
 
+            // 获取网格坐标
             grid_area.exit_gate_pos.x = center_pos_vec[0].x / grid_width;
             grid_area.exit_gate_pos.y = center_pos_vec[0].y / grid_height;
         }
+
         if constexpr (debug_option::print_area_info) {
             RCLCPP_INFO(get_logger(), "enter gate x:%d y:%d", real_area.enter_gate_pos.x, real_area.enter_gate_pos.y);
             RCLCPP_INFO(get_logger(), "exit gate x:%d y:%d", real_area.exit_gate_pos.x, real_area.exit_gate_pos.y);
@@ -168,7 +190,9 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
             publish_restart_info();
             return;
         }
+
         m_hp_block_width = border_rect_vec[0].width;
+
         m_initialized = true;
     }
     else {
@@ -209,9 +233,12 @@ void img2map::Node::img2map_cbfn(const sensor_msgs::msg::Image::SharedPtr ros_ra
             publish_restart_info();
             return;
         }
-        for (size_t i = 0; i < center_pos_vec.size();i++) {
+        for (size_t i = 0; i < center_pos_vec.size(); i++) {
+            // 去除不在敌人识别范围内的敌人
+            if (center_pos_vec[i].x > constant::enemy_max_x || center_pos_vec[i].y > constant::enemy_max_y) continue;
+
             info_interfaces::msg::Point enemy_pos;
-            if (center_pos_vec[i].x > constant::enemy_max_x) continue;
+
             // 获取敌人实际坐标
             enemy_pos.x = center_pos_vec[i].x;
             enemy_pos.y = center_pos_vec[i].y;

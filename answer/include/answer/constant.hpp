@@ -32,7 +32,10 @@ namespace constant {
     constexpr double speed_scale = 1.0 / 128.0; // 速度缩放比例
     const std::string serial_path = "/dev/pts/2"; // 串口路径
     constexpr int baud_rate = 115200; // 波特率
-    constexpr int enemy_max_x = 1900; // x大于这个值就视为基地旁边的敌人
+    constexpr int enemy_max_x = 1900; // x大于这个值就视为敌人识别范围外
+    constexpr int enemy_max_y = 2000; // y大于这个值就视为敌人识别范围外
+
+    /* 为了图像识别的准确性，限制要获取区域的大小范围，防止其他干扰 */
 
     constexpr int gate_min_width = 20;  // 通道最小宽度
     constexpr int gate_max_width = 50;  // 通道最大宽度

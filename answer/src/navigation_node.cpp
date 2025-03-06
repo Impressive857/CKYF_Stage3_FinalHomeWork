@@ -8,7 +8,6 @@ navigation::Node::Node(const std::string& name)
     m_last_real_x = 0;
     m_last_real_y = 0;
     m_bullet_num = 10;
-    m_last_hp = 1.0;
     m_should_stop = false;
     m_need_recover = false;
     m_password_has_got = false;
@@ -120,7 +119,6 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
             pose = get_pose(robot_info->our_robot_grid_pos, m_grid_area->recover_pos);
         }
 
-        m_last_hp = robot_info->our_robot_hp;
     }
     // 如果两段密码片段已经接收且密码片段未发送，则发送密码片段
     else if (m_password_segment_vec.size() >= 2 && !m_password_segment_has_sent) {
@@ -230,7 +228,6 @@ void navigation::Node::restart_cbfn(const example_interfaces::msg::Bool::SharedP
         m_password_segment_has_sent = false;
         m_password_has_got = false;
         m_password_has_sent = false;
-        m_last_hp = 1.0;
         m_last_real_x = 0;
         m_last_real_y = 0;
         m_real_area_has_got = false;

@@ -90,6 +90,8 @@ namespace navigation {
         std::vector<example_interfaces::msg::Int64> m_password_segment_vec;
         int m_dir_count; // 防止卡死时，记录方向的计数器
         int m_count; // 防止卡死时的计数器
+        uint32_t m_last_real_x; // 为了防止卡死，记录上一次位置x
+        uint32_t m_last_real_y; // 为了防止卡死，记录上一次位置y
         int m_bullet_num;
         bool m_should_stop;
         bool m_need_recover;
@@ -100,9 +102,6 @@ namespace navigation {
         bool m_real_map_has_got;
         bool m_grid_area_has_got;
         bool m_real_area_has_got;
-        double m_last_hp;
-        uint32_t m_last_real_x;
-        uint32_t m_last_real_y;
         my_serial::MySerial m_serial;
         my_serial::password_receive_t m_password_receive;
         Status m_current_status;
