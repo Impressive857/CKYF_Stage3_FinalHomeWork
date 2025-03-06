@@ -105,7 +105,7 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
     else if ((robot_info->our_robot_hp < constant::danger_hp || m_need_recover || m_bullet_num < constant::danger_bullet_num) && m_password_segment_vec.size() < 2) {
         m_current_status = Status::GET_RECOVER;
 
-        m_need_recover = robot_info->our_robot_hp >= constant::safe_hp;
+        m_need_recover = robot_info->our_robot_hp < constant::safe_hp;
 
         if (!robot_info->enemy_grid_pos_vec.empty()) {
             pose = get_pose(robot_info->our_robot_grid_pos, m_grid_area->recover_pos, robot_info->our_robot_real_pos, robot_info->enemy_real_pos_vec[0]);
