@@ -5,6 +5,7 @@ navigation::Node::Node(const std::string& name)
 {
     m_count = 0;
     m_dir_count = 0;
+    m_send_password_count = 0;
     m_last_real_x = 0;
     m_last_real_y = 0;
     m_bullet_num = 10;
@@ -149,8 +150,10 @@ void navigation::Node::robot_navigation_cbfn(const info_interfaces::msg::Robot::
 
             if (m_should_stop) {
                 m_password_publisher->publish(m_password);
-                RCLCPP_INFO(get_logger(), "password has send!");
-                m_password_has_sent = true;
+                if(++m_send_password_count > 20){
+                    RCLCPP_INFO(get_logger(), "password has send!");
+                    m_password_has_sent = true;
+                }
             }
         }
         // 密码已经发送且机器人能和出口直线到达，说明未离开密码发射区，前往出口
@@ -211,9 +214,9 @@ void navigation::Node::password_segment_cbfn(const example_interfaces::msg::Int6
 
 void navigation::Node::password_got_cbfn(const my_serial::password_receive_t& password_receive)
 {
-    m_password_receive = password_receive;
+    m_password.data = password_receive.password;
     m_password_has_got = true;
-    RCLCPP_INFO(get_logger(), "password has got:%ld", m_password_receive.password);
+    RCLCPP_INFO(get_logger(), "password has got:%ld", m_password.data);
 }
 
 void navigation::Node::restart_cbfn(const example_interfaces::msg::Bool::SharedPtr restart_info)
@@ -221,6 +224,7 @@ void navigation::Node::restart_cbfn(const example_interfaces::msg::Bool::SharedP
     if (true == restart_info->data) {
         m_password_segment_vec.clear();
         m_count = 0;
+        m_send_password_count = 0;
         m_dir_count = 0;
         m_bullet_num = 10;
         m_should_stop = false;
